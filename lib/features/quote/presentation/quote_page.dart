@@ -1,0 +1,655 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:printing/printing.dart';
+
+import '../../../core/formatters/brl.dart';
+import '../../antt/application/antt_official_consultation_service.dart';
+import '../application/location_distance_service.dart';
+import '../application/quote_pdf_service.dart';
+import '../domain/quote_input.dart';
+import 'quote_controller.dart';
+
+class QuotePage extends ConsumerWidget {
+  const QuotePage({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final input = ref.watch(quoteInputProvider);
+    final form = ref.watch(quoteFormProvider);
+    final quote = ref.watch(freightQuoteProvider);
+    final distanceService = ref.watch(locationDistanceServiceProvider);
+
+    return CustomScrollView(
+      slivers: [
+        const SliverAppBar.large(title: Text('Nova cotacao')),
+        SliverPadding(
+          padding: const EdgeInsets.all(24),
+          sliver: SliverList(
+            delegate: SliverChildListDelegate([
+              Wrap(
+                spacing: 16,
+                runSpacing: 16,
+                children: [
+                  _SegmentCard(
+                    title: 'Tipo e cliente',
+                    child: Column(
+                      children: [
+                        DropdownButtonFormField<String>(
+                          initialValue: form.quoteType,
+                          decoration: const InputDecoration(
+                            labelText: 'Tipo',
+                            prefixIcon: Icon(Icons.assignment_outlined),
+                          ),
+                          items: const [
+                            DropdownMenuItem(
+                              value: 'Orcamento',
+                              child: Text('Orcamento'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'Proposta',
+                              child: Text('Proposta'),
+                            ),
+                          ],
+                          onChanged: (value) {
+                            if (value == null) return;
+                            ref
+                                .read(quoteFormProvider.notifier)
+                                .update(form.copyWith(quoteType: value));
+                          },
+                        ),
+                        const SizedBox(height: 10),
+                        _EditableField(
+                          label: 'Solicitante',
+                          value: form.customerName,
+                          onChanged: (value) {
+                            ref
+                                .read(quoteFormProvider.notifier)
+                                .update(form.copyWith(customerName: value));
+                          },
+                        ),
+                        _EditableField(
+                          label: 'Vendedor',
+                          value: form.sellerName,
+                          onChanged: (value) {
+                            ref
+                                .read(quoteFormProvider.notifier)
+                                .update(form.copyWith(sellerName: value));
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                  _SegmentCard(
+                    title: 'Rota',
+                    child: Column(
+                      children: [
+                        _LocalityField(
+                          label: 'Origem',
+                          value: form.origin,
+                          service: distanceService,
+                          onChanged: (value) {
+                            final distance = distanceService
+                                .estimateRoadDistanceKm(
+                                  value,
+                                  form.destination,
+                                );
+                            ref
+                                .read(quoteFormProvider.notifier)
+                                .update(form.copyWith(origin: value));
+                            if (distance != null) {
+                              _update(ref, input, distanceKm: distance);
+                            }
+                          },
+                        ),
+                        _LocalityField(
+                          label: 'Destino',
+                          value: form.destination,
+                          service: distanceService,
+                          onChanged: (value) {
+                            final distance = distanceService
+                                .estimateRoadDistanceKm(form.origin, value);
+                            ref
+                                .read(quoteFormProvider.notifier)
+                                .update(form.copyWith(destination: value));
+                            if (distance != null) {
+                              _update(ref, input, distanceKm: distance);
+                            }
+                          },
+                        ),
+                        _NumberSlider(
+                          label: 'Distancia rodoviaria',
+                          suffix: 'km',
+                          value: input.distanceKm,
+                          min: 50,
+                          max: 1600,
+                          onChanged: (value) =>
+                              _update(ref, input, distanceKm: value),
+                        ),
+                      ],
+                    ),
+                  ),
+                  _SegmentCard(
+                    title: 'Carga',
+                    child: Column(
+                      children: [
+                        _NumberSlider(
+                          label: 'Peso total',
+                          suffix: 'kg',
+                          value: input.totalWeightKg,
+                          min: 100,
+                          max: 28000,
+                          onChanged: (value) =>
+                              _update(ref, input, totalWeightKg: value),
+                        ),
+                        _NumberSlider(
+                          label: 'Cubagem',
+                          suffix: 'm3',
+                          value: input.totalVolumeM3,
+                          min: 1,
+                          max: 90,
+                          onChanged: (value) =>
+                              _update(ref, input, totalVolumeM3: value),
+                        ),
+                        _EditableField(
+                          label: 'Tipo de carga',
+                          value: form.cargoType,
+                          onChanged: (value) {
+                            ref
+                                .read(quoteFormProvider.notifier)
+                                .update(form.copyWith(cargoType: value));
+                          },
+                        ),
+                        _MoneyField(
+                          label: 'Valor aproximado da NF',
+                          value: input.invoiceValue,
+                          onChanged: (value) =>
+                              _update(ref, input, invoiceValue: value),
+                        ),
+                        _PercentField(
+                          label: 'Margem de lucro',
+                          value: input.marginPercent,
+                          onChanged: (value) =>
+                              _update(ref, input, marginPercent: value),
+                        ),
+                        _MoneyField(
+                          label: 'Piso ANTT confirmado',
+                          value: input.minimumAntt,
+                          onChanged: (value) =>
+                              _update(ref, input, minimumAntt: value),
+                        ),
+                      ],
+                    ),
+                  ),
+                  _SegmentCard(
+                    title: 'Resultado comercial',
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _ResultRow(
+                          'Veiculo recomendado',
+                          quote.suggestedVehicle,
+                        ),
+                        _ResultRow('Carroceria', quote.bodyType),
+                        _ResultRow(
+                          'Custo operacional',
+                          brl(quote.operationalCost),
+                        ),
+                        _ResultRow('Seguro', brl(quote.insuranceValue)),
+                        _ResultRow('Ad valorem', brl(quote.adValoremValue)),
+                        _ResultRow('Lucro / margem', brl(quote.marginValue)),
+                        _ResultRow('ICMS', brl(quote.icmsValue)),
+                        _ResultRow('PIS', brl(quote.pisValue)),
+                        _ResultRow('COFINS', brl(quote.cofinsValue)),
+                        _ResultRow('Piso ANTT', brl(quote.minimumAnttValue)),
+                        const Divider(height: 28),
+                        Text(
+                          brl(quote.commercialValue),
+                          style: Theme.of(context).textTheme.displaySmall,
+                        ),
+                        const SizedBox(height: 8),
+                        _AnttBadge(isBelowAntt: quote.isBelowAntt),
+                        const SizedBox(height: 10),
+                        OutlinedButton.icon(
+                          onPressed: () async {
+                            final opened =
+                                await const AnttOfficialConsultationService()
+                                    .openOfficialCalculator();
+                            if (!opened && context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'Nao foi possivel abrir a calculadora oficial da ANTT.',
+                                  ),
+                                ),
+                              );
+                            }
+                          },
+                          icon: const Icon(Icons.open_in_new),
+                          label: const Text('Consultar ANTT oficial'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.info_outline),
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Text(
+                          'Calculo comercial estimativo. Parametros fiscais, custos, margens e piso ANTT devem ser validados pela administracao.',
+                        ),
+                      ),
+                      FilledButton.icon(
+                        onPressed: () async {
+                          final pdf = await const QuotePdfService()
+                              .buildExecutiveQuote(input: input, quote: quote);
+                          await Printing.layoutPdf(
+                            name: 'proposta-fretecerto.pdf',
+                            onLayout: (_) async => pdf,
+                          );
+                        },
+                        icon: const Icon(Icons.picture_as_pdf_outlined),
+                        label: const Text('Gerar PDF'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ]),
+          ),
+        ),
+      ],
+    );
+  }
+
+  static void _update(
+    WidgetRef ref,
+    QuoteInput input, {
+    double? distanceKm,
+    double? totalWeightKg,
+    double? totalVolumeM3,
+    double? invoiceValue,
+    double? marginPercent,
+    double? minimumAntt,
+  }) {
+    ref
+        .read(quoteInputProvider.notifier)
+        .replace(
+          QuoteInput(
+            distanceKm: distanceKm ?? input.distanceKm,
+            totalWeightKg: totalWeightKg ?? input.totalWeightKg,
+            totalVolumeM3: totalVolumeM3 ?? input.totalVolumeM3,
+            invoiceValue: invoiceValue ?? input.invoiceValue,
+            marginPercent: marginPercent ?? input.marginPercent,
+            toll: input.toll,
+            loadingFee: input.loadingFee,
+            unloadingFee: input.unloadingFee,
+            icmsPercent: input.icmsPercent,
+            pisPercent: input.pisPercent,
+            cofinsPercent: input.cofinsPercent,
+            adValoremPercent: input.adValoremPercent,
+            insurancePercent: input.insurancePercent,
+            trackingFee: input.trackingFee,
+            minimumAntt: minimumAntt ?? input.minimumAntt,
+          ),
+        );
+  }
+}
+
+class _SegmentCard extends StatelessWidget {
+  const _SegmentCard({required this.title, required this.child});
+
+  final String title;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final width = MediaQuery.sizeOf(context).width;
+    return SizedBox(
+      width: width < 760 ? width : 420,
+      child: Card(
+        child: Padding(
+          padding: const EdgeInsets.all(18),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: Theme.of(context).textTheme.titleLarge),
+              const SizedBox(height: 14),
+              child,
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _EditableField extends StatefulWidget {
+  const _EditableField({
+    required this.label,
+    required this.value,
+    required this.onChanged,
+  });
+
+  final String label;
+  final String value;
+  final ValueChanged<String> onChanged;
+
+  @override
+  State<_EditableField> createState() => _EditableFieldState();
+}
+
+class _EditableFieldState extends State<_EditableField> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.value);
+  }
+
+  @override
+  void didUpdateWidget(covariant _EditableField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.value != widget.value && _controller.text != widget.value) {
+      _controller.text = widget.value;
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: TextField(
+        controller: _controller,
+        onChanged: widget.onChanged,
+        decoration: InputDecoration(labelText: widget.label),
+      ),
+    );
+  }
+}
+
+class _LocalityField extends StatefulWidget {
+  const _LocalityField({
+    required this.label,
+    required this.value,
+    required this.service,
+    required this.onChanged,
+  });
+
+  final String label;
+  final String value;
+  final LocationDistanceService service;
+  final ValueChanged<String> onChanged;
+
+  @override
+  State<_LocalityField> createState() => _LocalityFieldState();
+}
+
+class _LocalityFieldState extends State<_LocalityField> {
+  late final TextEditingController _controller;
+  late final FocusNode _focusNode;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.value);
+    _focusNode = FocusNode();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: RawAutocomplete<Locality>(
+        textEditingController: _controller,
+        focusNode: _focusNode,
+        displayStringForOption: (option) => option.label,
+        optionsBuilder: (textEditingValue) {
+          return widget.service.search(textEditingValue.text);
+        },
+        onSelected: (locality) {
+          _controller.text = locality.label;
+          widget.onChanged(locality.label);
+        },
+        fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+          return TextField(
+            controller: controller,
+            focusNode: focusNode,
+            decoration: InputDecoration(
+              labelText: widget.label,
+              prefixIcon: const Icon(Icons.location_on_outlined),
+              suffixIcon: IconButton(
+                tooltip: 'Usar localidade',
+                onPressed: () => widget.onChanged(controller.text),
+                icon: const Icon(Icons.check),
+              ),
+            ),
+            onChanged: widget.onChanged,
+          );
+        },
+        optionsViewBuilder: (context, onSelected, options) {
+          return Align(
+            alignment: Alignment.topLeft,
+            child: Material(
+              elevation: 6,
+              borderRadius: BorderRadius.circular(8),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(
+                  maxWidth: 360,
+                  maxHeight: 240,
+                ),
+                child: ListView.builder(
+                  padding: EdgeInsets.zero,
+                  itemCount: options.length,
+                  itemBuilder: (context, index) {
+                    final option = options.elementAt(index);
+                    return ListTile(
+                      dense: true,
+                      leading: const Icon(Icons.location_city_outlined),
+                      title: Text(option.label),
+                      onTap: () => onSelected(option),
+                    );
+                  },
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _MoneyField extends StatefulWidget {
+  const _MoneyField({
+    required this.label,
+    required this.value,
+    required this.onChanged,
+  });
+
+  final String label;
+  final double value;
+  final ValueChanged<double> onChanged;
+
+  @override
+  State<_MoneyField> createState() => _MoneyFieldState();
+}
+
+class _MoneyFieldState extends State<_MoneyField> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.value.toStringAsFixed(2));
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: TextField(
+        controller: _controller,
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        decoration: InputDecoration(
+          labelText: widget.label,
+          prefixText: 'R\$ ',
+        ),
+        onChanged: (value) {
+          final parsed = double.tryParse(value.replaceAll(',', '.'));
+          if (parsed != null) widget.onChanged(parsed);
+        },
+      ),
+    );
+  }
+}
+
+class _PercentField extends StatefulWidget {
+  const _PercentField({
+    required this.label,
+    required this.value,
+    required this.onChanged,
+  });
+
+  final String label;
+  final double value;
+  final ValueChanged<double> onChanged;
+
+  @override
+  State<_PercentField> createState() => _PercentFieldState();
+}
+
+class _PercentFieldState extends State<_PercentField> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.value.toStringAsFixed(2));
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: TextField(
+        controller: _controller,
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        decoration: InputDecoration(labelText: widget.label, suffixText: '%'),
+        onChanged: (value) {
+          final parsed = double.tryParse(value.replaceAll(',', '.'));
+          if (parsed != null) widget.onChanged(parsed);
+        },
+      ),
+    );
+  }
+}
+
+class _NumberSlider extends StatelessWidget {
+  const _NumberSlider({
+    required this.label,
+    required this.suffix,
+    required this.value,
+    required this.min,
+    required this.max,
+    required this.onChanged,
+  });
+
+  final String label;
+  final String suffix;
+  final double value;
+  final double min;
+  final double max;
+  final ValueChanged<double> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('$label: ${value.toStringAsFixed(0)} $suffix'),
+          Slider(value: value, min: min, max: max, onChanged: onChanged),
+        ],
+      ),
+    );
+  }
+}
+
+class _ResultRow extends StatelessWidget {
+  const _ResultRow(this.label, this.value);
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 5),
+      child: Row(
+        children: [
+          Expanded(child: Text(label)),
+          Text(value, style: const TextStyle(fontWeight: FontWeight.w700)),
+        ],
+      ),
+    );
+  }
+}
+
+class _AnttBadge extends StatelessWidget {
+  const _AnttBadge({required this.isBelowAntt});
+
+  final bool isBelowAntt;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = isBelowAntt ? Colors.red.shade700 : Colors.green.shade700;
+    return Chip(
+      avatar: Icon(
+        isBelowAntt ? Icons.warning_amber : Icons.check_circle,
+        color: Colors.white,
+        size: 18,
+      ),
+      label: Text(
+        isBelowAntt
+            ? 'Abaixo do piso ANTT informado'
+            : 'Acima do piso ANTT informado',
+      ),
+      backgroundColor: color,
+      labelStyle: const TextStyle(color: Colors.white),
+    );
+  }
+}
