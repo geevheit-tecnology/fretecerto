@@ -1,0 +1,1822 @@
+# PROMPT PARA DESENVOLVIMENTO DO APLICATIVO FLUTTER — FRETECERTO
+
+Atue como arquiteto de software, engenheiro Flutter sênior, especialista em sistemas de transporte rodoviário de cargas, UX/UI, segurança, testes automatizados e integração de APIs.
+
+Desenvolva um aplicativo profissional chamado **FreteCerto**, destinado à criação de orçamentos e propostas comerciais de frete rodoviário.
+
+O aplicativo deverá calcular a composição do valor do frete com base em:
+
+* Origem e destino;
+* Distância rodoviária;
+* Peso;
+* Cubagem;
+* Dimensões da carga;
+* Tipo de carga;
+* Modalidade da operação;
+* Veículo recomendado;
+* Tipo de carroceria;
+* Tributos;
+* Custos operacionais;
+* Seguro;
+* Rastreamento;
+* Carga e descarga;
+* Margem de lucro;
+* Piso mínimo sugerido pela ANTT.
+
+O projeto deve ser construído dentro de boas práticas de arquitetura, engenharia de software, segurança, manutenibilidade e escalabilidade.
+
+---
+
+# 1. TECNOLOGIAS
+
+Utilize:
+
+* Flutter na versão estável mais recente;
+* Dart com null safety;
+* Material Design 3;
+* Clean Architecture;
+* Feature-first;
+* SOLID;
+* Repository Pattern;
+* Dependency Injection;
+* Riverpod para gerenciamento de estado;
+* GoRouter para navegação;
+* Dio para comunicação HTTP;
+* Freezed e Json Serializable para modelos;
+* Drift ou Isar para armazenamento local;
+* Backend preparado para Supabase ou API própria;
+* PostgreSQL como banco principal;
+* Firebase Crashlytics ou Sentry para monitoramento de erros;
+* Flutter Secure Storage para tokens e dados sensíveis;
+* Internacionalização preparada para `pt-BR`;
+* Formatação monetária em real brasileiro;
+* Máscaras para CPF, CNPJ, CEP, telefone e valores monetários.
+
+Não concentrar regras de negócio dentro dos widgets.
+
+Criar interfaces abstratas para todos os serviços externos, permitindo substituir provedores sem alterar as regras principais do sistema.
+
+---
+
+# 2. OBJETIVO DO APLICATIVO
+
+O FreteCerto deverá permitir:
+
+1. Cadastrar clientes pessoa física e jurídica;
+2. Consultar dados de empresa por CNPJ;
+3. Criar orçamento sem cliente previamente cadastrado;
+4. Criar proposta somente vinculada a um cliente;
+5. Cadastrar um cliente durante o preenchimento da cotação;
+6. Pesquisar origem e destino por cidade ou endereço;
+7. Exibir origem, destino e rota no mapa;
+8. Calcular distância rodoviária;
+9. Registrar dados completos da carga;
+10. Recomendar veículo e carroceria;
+11. Calcular preço comercial do frete;
+12. Comparar o preço calculado com o piso mínimo da ANTT;
+13. Gerar orçamento ou proposta em PDF;
+14. Compartilhar o documento;
+15. Salvar histórico, versões e alterações;
+16. Converter orçamento em proposta;
+17. Converter proposta aprovada em operação de frete futuramente.
+
+---
+
+# 3. PERFIS DE ACESSO
+
+Implementar inicialmente:
+
+## Administrador
+
+Pode:
+
+* Gerenciar usuários;
+* Cadastrar impostos;
+* Configurar custos;
+* Configurar veículos;
+* Configurar carrocerias;
+* Configurar regras de cálculo;
+* Atualizar parâmetros da ANTT;
+* Visualizar todas as cotações;
+* Editar propostas;
+* Aprovar descontos;
+* Consultar relatórios;
+* Visualizar logs de alterações.
+
+## Comercial
+
+Pode:
+
+* Cadastrar clientes;
+* Criar orçamentos;
+* Criar propostas;
+* Consultar rotas;
+* Calcular fretes;
+* Gerar PDF;
+* Compartilhar documentos;
+* Aplicar descontos dentro de um limite autorizado.
+
+## Consulta
+
+Pode apenas visualizar:
+
+* Clientes;
+* Orçamentos;
+* Propostas;
+* Valores;
+* Relatórios autorizados.
+
+Criar estrutura que permita adicionar outros perfis futuramente.
+
+---
+
+# 4. AUTENTICAÇÃO
+
+Criar:
+
+* Login por e-mail e senha;
+* Recuperação de senha;
+* Sessão segura;
+* Logout;
+* Controle de permissões por perfil;
+* Proteção de rotas;
+* Renovação de token;
+* Registro de último acesso;
+* Bloqueio após tentativas excessivas;
+* Possibilidade futura de autenticação em dois fatores.
+
+---
+
+# 5. CADASTRO DE CLIENTES
+
+Criar cadastro de:
+
+* Pessoa jurídica;
+* Pessoa física.
+
+## Pessoa jurídica
+
+Campos:
+
+* CNPJ;
+* Razão social;
+* Nome fantasia;
+* Inscrição estadual;
+* Inscrição municipal;
+* E-mail;
+* Telefone;
+* WhatsApp;
+* CEP;
+* Logradouro;
+* Número;
+* Complemento;
+* Bairro;
+* Cidade;
+* Código IBGE;
+* Estado;
+* País;
+* Nome do contato;
+* Cargo do contato;
+* Observações;
+* Status ativo ou inativo.
+
+Ao informar o CNPJ:
+
+1. Validar os dígitos;
+2. Consultar um serviço externo por meio de uma interface `CompanyLookupService`;
+3. Preencher automaticamente os dados disponíveis;
+4. Permitir revisão antes de salvar;
+5. Não bloquear o cadastro caso a API esteja indisponível;
+6. Permitir preenchimento manual;
+7. Exibir claramente a origem dos dados consultados;
+8. Não depender diretamente de um único fornecedor.
+
+Criar adaptadores para que o serviço de consulta possa ser trocado posteriormente.
+
+## Pessoa física
+
+Campos:
+
+* CPF;
+* Nome completo;
+* E-mail;
+* Telefone;
+* WhatsApp;
+* CEP;
+* Logradouro;
+* Número;
+* Complemento;
+* Bairro;
+* Cidade;
+* Código IBGE;
+* Estado;
+* País;
+* Observações;
+* Status ativo ou inativo.
+
+Validar CPF localmente.
+
+Não consultar dados pessoais de CPF em fontes não autorizadas.
+
+## Endereços adicionais
+
+Um cliente pode possuir:
+
+* Endereço principal;
+* Endereço de coleta;
+* Endereço de entrega;
+* Endereço de cobrança;
+* Outros endereços.
+
+---
+
+# 6. CADASTRO DE IMPOSTOS E PARÂMETROS
+
+Criar módulo administrativo de impostos, taxas e custos.
+
+Não fixar percentuais tributários diretamente no código.
+
+Criar configurações com:
+
+* Nome do imposto;
+* Sigla;
+* Percentual;
+* Tipo de cálculo;
+* Base de cálculo;
+* Aplicação por dentro ou por fora;
+* Vigência inicial;
+* Vigência final;
+* Estado de origem;
+* Estado de destino;
+* Tipo de cliente;
+* Tipo de operação;
+* Regime tributário;
+* Prioridade;
+* Status ativo ou inativo;
+* Observações.
+
+Permitir cadastrar, por exemplo:
+
+* ICMS;
+* ISS, quando aplicável;
+* PIS;
+* COFINS;
+* IRPJ;
+* CSLL;
+* Taxas administrativas;
+* GRIS;
+* Ad valorem;
+* Pedágio;
+* Taxa de gerenciamento de risco;
+* Taxa de dificuldade de entrega;
+* Taxa de permanência;
+* Taxa de carga;
+* Taxa de descarga;
+* Seguro;
+* Rastreamento;
+* Outros componentes.
+
+A aplicação não deve determinar automaticamente obrigações fiscais sem configuração e validação contábil.
+
+Exibir aviso de que os cálculos são estimativas comerciais e devem ser validados pelo setor fiscal ou contábil.
+
+---
+
+# 7. CONFIGURAÇÃO DE CUSTOS
+
+Criar módulo para cadastrar custos utilizados no cálculo do frete.
+
+## Custos variáveis
+
+* Combustível por quilômetro;
+* Pedágio;
+* Manutenção por quilômetro;
+* Pneus por quilômetro;
+* Lubrificantes;
+* Rastreamento;
+* Seguro;
+* Diária de motorista;
+* Ajudantes;
+* Carga;
+* Descarga;
+* Alimentação;
+* Hospedagem;
+* Balsa;
+* Escolta;
+* Gerenciamento de risco;
+* Outros.
+
+## Custos fixos rateados
+
+* Salário;
+* Encargos;
+* Seguro do veículo;
+* Licenciamento;
+* IPVA;
+* Depreciação;
+* Financiamento;
+* Rastreador;
+* Administração;
+* Tecnologia;
+* Outros.
+
+## Margens
+
+Permitir configurar:
+
+* Margem padrão;
+* Margem mínima;
+* Margem por cliente;
+* Margem por veículo;
+* Margem por tipo de carga;
+* Margem por distância;
+* Margem por região;
+* Limite de desconto por perfil de usuário.
+
+Todas as configurações devem possuir vigência e histórico.
+
+---
+
+# 8. CADASTRO DE VEÍCULOS PADRÃO
+
+Criar uma tabela configurável de categorias de veículos.
+
+Categorias iniciais:
+
+* Utilitário;
+* Fiorino;
+* Van;
+* VUC;
+* Caminhão 3/4;
+* Toco;
+* Truck;
+* Bitruck;
+* Carreta simples;
+* Carreta trucada;
+* Carreta de 7 eixos;
+* Carreta de 9 eixos;
+* Outros.
+
+Para cada categoria cadastrar:
+
+* Nome;
+* Peso máximo recomendado;
+* Capacidade útil;
+* Volume máximo;
+* Comprimento útil;
+* Largura útil;
+* Altura útil;
+* Número de eixos;
+* Tipo de composição;
+* Consumo médio;
+* Custo médio por quilômetro;
+* Limite de distância;
+* Tipos de carga permitidos;
+* Carrocerias compatíveis;
+* Restrições;
+* Status.
+
+Os valores devem ser administrativos e configuráveis, pois capacidades reais variam conforme veículo, implemento, legislação e operação.
+
+---
+
+# 9. CADASTRO DE CARROCERIAS
+
+Categorias iniciais:
+
+* Baú;
+* Sider;
+* Carga seca;
+* Graneleira;
+* Basculante;
+* Frigorífica;
+* Tanque;
+* Porta-contêiner;
+* Plataforma;
+* Prancha;
+* Outros.
+
+Ao selecionar “Outros”, exibir campo obrigatório para descrição.
+
+Para cada carroceria cadastrar:
+
+* Nome;
+* Tipos de carga compatíveis;
+* Dimensões;
+* Capacidade;
+* Restrições;
+* Adicional de custo;
+* Status.
+
+---
+
+# 10. ORÇAMENTO E PROPOSTA
+
+Ao iniciar uma nova cotação, solicitar:
+
+* Orçamento;
+* Proposta.
+
+## Orçamento
+
+Pode ser criado:
+
+* Sem cliente cadastrado;
+* Com nome do solicitante;
+* Com telefone;
+* Com e-mail;
+* Com empresa informada apenas como texto;
+* Com cliente cadastrado opcionalmente.
+
+## Proposta
+
+Deve obrigatoriamente possuir cliente cadastrado.
+
+Caso o usuário selecione proposta e não exista cliente:
+
+1. Exibir opção “Cadastrar cliente agora”;
+2. Abrir cadastro em modal, bottom sheet ou rota interna;
+3. Salvar o novo cliente;
+4. Retornar automaticamente à proposta;
+5. Preservar todos os campos já preenchidos;
+6. Selecionar automaticamente o cliente recém-cadastrado.
+
+Não perder os dados do formulário ao navegar para o cadastro.
+
+---
+
+# 11. FORMULÁRIO DE COTAÇÃO
+
+Dividir o formulário em etapas.
+
+## Etapa 1 — Tipo e cliente
+
+* Orçamento ou proposta;
+* Cliente;
+* Contato;
+* Telefone;
+* E-mail;
+* Validade da cotação;
+* Vendedor responsável;
+* Observações iniciais.
+
+## Etapa 2 — Origem
+
+Campos:
+
+* CEP;
+* Cidade;
+* Estado;
+* Código IBGE;
+* Endereço;
+* Número;
+* Bairro;
+* Complemento;
+* Referência;
+* Latitude;
+* Longitude;
+* Data prevista de coleta;
+* Horário previsto;
+* Restrições de acesso;
+* Observações.
+
+## Etapa 3 — Destino
+
+Utilizar os mesmos campos da origem.
+
+## Etapa 4 — Carga
+
+Campos:
+
+* Descrição do material;
+* Quantidade de volumes;
+* Unidade de medida;
+* Peso total;
+* Peso unitário;
+* Comprimento;
+* Largura;
+* Altura;
+* Volume total;
+* Cubagem;
+* Peso cubado;
+* Valor aproximado da nota fiscal;
+* Mercadoria perigosa;
+* Produto controlado;
+* Perecível;
+* Necessita refrigeração;
+* Empilhável;
+* Frágil;
+* Observações.
+
+Permitir adicionar vários itens de carga com dimensões diferentes.
+
+Calcular:
+
+`volume do item = comprimento × largura × altura × quantidade`
+
+Calcular volume total somando todos os itens.
+
+Criar parâmetro administrativo para fator de cubagem.
+
+Exibir:
+
+* Peso real;
+* Peso cubado;
+* Peso considerado no cálculo.
+
+## Etapa 5 — Tipo de carga
+
+Opções iniciais:
+
+* Carga geral;
+* Granel sólido;
+* Granel líquido;
+* Granel pressurizado;
+* Frigorificada ou aquecida;
+* Conteinerizada;
+* Perigosa;
+* Neogranel;
+* Outros.
+
+Ao selecionar “Outros”, exigir descrição.
+
+Separar o tipo comercial interno do tipo de carga utilizado pela ANTT, criando um mapeamento configurável entre eles.
+
+## Etapa 6 — Modalidade
+
+Opções:
+
+* Fracionado;
+* Dedicado;
+* Lotação;
+* Redespacho;
+* Transferência;
+* Outros.
+
+Ao selecionar “Outros”, exigir descrição.
+
+## Etapa 7 — Serviços adicionais
+
+Perguntas com opções “Sim” ou “Não”:
+
+* Requer carga?
+* Requer descarga?
+* Requer ajudante?
+* Requer seguro?
+* Requer rastreamento?
+* Requer gerenciamento de risco?
+* Requer escolta?
+* Requer agendamento?
+* Requer paletização?
+* Requer autorização especial?
+* Possui pedágio?
+* Possui retorno vazio?
+
+Quando a resposta for “Sim”, permitir informar:
+
+* Tipo de cobrança;
+* Quantidade;
+* Valor unitário;
+* Valor total;
+* Observações.
+
+## Etapa 8 — Veículo e carroceria
+
+Exibir:
+
+* Veículo recomendado;
+* Motivo da recomendação;
+* Alternativas possíveis;
+* Quantidade de veículos;
+* Número de eixos;
+* Carroceria recomendada;
+* Possíveis incompatibilidades;
+* Alertas de excesso de peso ou dimensão.
+
+Permitir que o usuário altere manualmente a recomendação.
+
+Ao alterar manualmente, solicitar justificativa.
+
+## Etapa 9 — Cálculo ANTT
+
+Solicitar ou preencher:
+
+* Tipo de carga ANTT;
+* Número de eixos;
+* Distância;
+* Composição veicular;
+* Alto desempenho;
+* Retorno vazio;
+* Tipo de operação;
+* Tabela aplicável;
+* Versão dos coeficientes;
+* Data de vigência.
+
+Exibir o valor estimado do piso mínimo.
+
+## Etapa 10 — Composição comercial
+
+Exibir todos os componentes do preço.
+
+## Etapa 11 — Revisão
+
+Apresentar resumo completo antes da geração do documento.
+
+---
+
+# 12. PESQUISA DE CIDADES E ENDEREÇOS
+
+Criar uma abstração:
+
+```dart
+abstract interface class LocationSearchService {
+  Future<List<LocationSuggestion>> search(String query);
+  Future<GeoPoint> geocode(Address address);
+  Future<Address> reverseGeocode(GeoPoint point);
+}
+```
+
+A pesquisa deve permitir:
+
+* Cidade;
+* Município;
+* Estado;
+* CEP;
+* Endereço completo;
+* Localização pelo mapa.
+
+Utilizar código IBGE para identificar municípios brasileiros.
+
+Permitir integração com provedores como:
+
+* Google Maps Platform;
+* Mapbox;
+* HERE;
+* OpenStreetMap/Nominatim;
+* Serviços oficiais de localidades, quando disponíveis.
+
+O provedor deve ser definido por configuração de ambiente.
+
+Implementar:
+
+* Debounce na pesquisa;
+* Cache local;
+* Tratamento de limite de requisições;
+* Tratamento de resultados duplicados;
+* Seleção manual no mapa;
+* Correção manual do endereço;
+* Armazenamento de latitude e longitude;
+* Consentimento adequado para localização do dispositivo.
+
+---
+
+# 13. MAPA E ROTA
+
+Criar uma abstração:
+
+```dart
+abstract interface class RouteService {
+  Future<RouteResult> calculateRoute({
+    required GeoPoint origin,
+    required GeoPoint destination,
+    List<GeoPoint> waypoints,
+    VehicleRouteProfile? vehicleProfile,
+  });
+}
+```
+
+Retornar:
+
+* Distância rodoviária em quilômetros;
+* Duração estimada;
+* Coordenadas da rota;
+* Pedágios, quando o provedor oferecer;
+* Trechos da rota;
+* Alertas;
+* Data e hora da consulta;
+* Provedor utilizado.
+
+Exibir no mapa:
+
+* Marcador de origem;
+* Marcador de destino;
+* Linha da rota;
+* Distância;
+* Tempo estimado;
+* Botão para recalcular;
+* Botão para inverter origem e destino.
+
+Não utilizar distância em linha reta como valor principal do frete.
+
+Caso a API de rotas fique indisponível:
+
+* Permitir informar a distância manualmente;
+* Marcar a distância como manual;
+* Registrar justificativa;
+* Exibir aviso no documento.
+
+---
+
+# 14. MOTOR DE RECOMENDAÇÃO DE VEÍCULO
+
+Criar um serviço de domínio independente:
+
+```dart
+abstract interface class VehicleRecommendationService {
+  VehicleRecommendation recommend(
+    CargoSpecification cargo,
+    List<VehicleCategory> availableVehicles,
+  );
+}
+```
+
+A recomendação deve considerar:
+
+* Peso real;
+* Peso cubado;
+* Peso considerado;
+* Comprimento;
+* Largura;
+* Altura;
+* Volume;
+* Quantidade de volumes;
+* Tipo de carga;
+* Carroceria;
+* Modalidade;
+* Restrições;
+* Necessidade de refrigeração;
+* Carga perigosa;
+* Compatibilidade operacional.
+
+Regras:
+
+1. Eliminar veículos abaixo da capacidade necessária;
+2. Eliminar veículos com dimensões incompatíveis;
+3. Eliminar carrocerias incompatíveis;
+4. Selecionar a menor categoria que comporte a carga com margem configurável;
+5. Exibir alternativas maiores;
+6. Nunca tratar a recomendação como autorização legal;
+7. Exibir alerta para validação humana;
+8. Permitir configuração administrativa das capacidades.
+
+Exemplo de retorno:
+
+```dart
+class VehicleRecommendation {
+  final VehicleCategory recommended;
+  final List<VehicleCategory> alternatives;
+  final List<String> reasons;
+  final List<String> warnings;
+  final bool requiresManualValidation;
+}
+```
+
+---
+
+# 15. MOTOR DE CÁLCULO COMERCIAL
+
+Criar um `FreightPricingEngine` puro, sem dependência de interface ou banco.
+
+Exemplo:
+
+```dart
+abstract interface class FreightPricingEngine {
+  FreightCalculation calculate(FreightCalculationInput input);
+}
+```
+
+Considerar:
+
+## Custos da viagem
+
+* Distância de ida;
+* Distância de retorno;
+* Retorno vazio;
+* Combustível;
+* Pedágio;
+* Manutenção;
+* Pneus;
+* Motorista;
+* Ajudante;
+* Diárias;
+* Carga;
+* Descarga;
+* Seguro;
+* Rastreamento;
+* Gerenciamento de risco;
+* Custos adicionais;
+* Rateio de custos fixos.
+
+## Base operacional
+
+Calcular:
+
+```text
+custo_operacional =
+  combustível
+  + pedágio
+  + manutenção
+  + pneus
+  + motorista
+  + ajudantes
+  + carga
+  + descarga
+  + seguro
+  + rastreamento
+  + gerenciamento_de_risco
+  + custos_adicionais
+  + custos_fixos_rateados
+```
+
+## Margem
+
+Permitir margem:
+
+* Sobre o custo;
+* Sobre o preço final.
+
+Não misturar as duas fórmulas.
+
+Exemplo de margem sobre custo:
+
+```text
+preço_sem_tributos = custo_operacional × (1 + margem)
+```
+
+Exemplo de margem sobre preço:
+
+```text
+preço_sem_tributos = custo_operacional ÷ (1 - margem)
+```
+
+## Tributos
+
+O motor deve suportar tributos:
+
+* Por dentro;
+* Por fora;
+* Fixos;
+* Percentuais;
+* Cumulativos;
+* Não cumulativos;
+* Aplicados a bases diferentes.
+
+## Resultado
+
+Retornar:
+
+* Distância considerada;
+* Peso real;
+* Peso cubado;
+* Veículo;
+* Carroceria;
+* Custo por quilômetro;
+* Custo operacional;
+* Custos adicionais;
+* Margem;
+* Valor líquido;
+* Tributos;
+* Valor bruto;
+* Valor por quilômetro;
+* Valor por tonelada;
+* Piso mínimo ANTT;
+* Diferença para o piso ANTT;
+* Percentual acima ou abaixo da referência;
+* Alertas;
+* Memória de cálculo.
+
+Utilizar tipo decimal apropriado para valores financeiros.
+
+Não usar `double` diretamente para operações monetárias críticas sem estratégia de arredondamento.
+
+Definir política de arredondamento explícita.
+
+---
+
+# 16. INTEGRAÇÃO COM A ANTT
+
+Criar módulo independente chamado `antt_freight_floor`.
+
+Não realizar scraping não autorizado nem depender de HTML interno da calculadora.
+
+Criar esta interface:
+
+```dart
+abstract interface class AnttFreightFloorService {
+  Future<AnttCalculationResult> calculate(
+    AnttCalculationInput input,
+  );
+
+  Future<AnttTableVersion?> getCurrentVersion();
+}
+```
+
+Implementar três estratégias.
+
+## Estratégia 1 — API oficial
+
+Caso exista API oficial documentada e autorizada:
+
+* Integrar pelo backend;
+* Não expor credenciais no Flutter;
+* Validar contrato;
+* Tratar indisponibilidade;
+* Registrar data, versão e fonte;
+* Criar testes de contrato;
+* Utilizar somente documentação oficial.
+
+## Estratégia 2 — Coeficientes administrativos
+
+Permitir que um administrador cadastre ou importe:
+
+* Tipo de tabela;
+* Tipo de carga;
+* Número de eixos;
+* CCD;
+* CC;
+* Alto desempenho;
+* Retorno vazio;
+* Vigência inicial;
+* Vigência final;
+* Número da norma;
+* Fonte oficial;
+* Data da atualização.
+
+Criar importação por CSV ou JSON.
+
+Aplicar a fórmula conforme a tabela vigente e a regra oficial correspondente.
+
+Nunca deixar coeficientes permanentes escritos diretamente no código.
+
+Guardar a versão utilizada em cada cálculo.
+
+## Estratégia 3 — Consulta externa
+
+Adicionar botão:
+
+**“Abrir calculadora oficial da ANTT”**
+
+Abrir o endereço oficial em navegador externo ou WebView controlada, conforme permitido.
+
+Não apresentar o conteúdo externo como se fosse funcionalidade própria.
+
+Exibir:
+
+* Data da consulta;
+* Link da fonte;
+* Aviso de conferência;
+* Campo para registrar manualmente o valor consultado;
+* Evidência ou observação opcional.
+
+## Regras importantes
+
+* O valor ANTT deve aparecer separado do preço comercial;
+* Não chamar o valor ANTT de preço final;
+* Exibir a diferença entre os valores;
+* Alertar quando a proposta estiver abaixo do piso configurado;
+* Bloquear ou exigir autorização de administrador conforme a regra da empresa;
+* Registrar qualquer exceção;
+* Manter histórico da versão dos coeficientes;
+* Preparar o módulo para alterações regulatórias;
+* Exibir aviso de que a regra oficial vigente prevalece sobre o cálculo interno.
+
+---
+
+# 17. ABA EXCLUSIVA “CALCULADORA ANTT”
+
+Criar uma opção no menu principal chamada:
+
+**Calculadora ANTT**
+
+Campos:
+
+* Tipo de carga;
+* Quantidade de eixos;
+* Distância;
+* Composição veicular;
+* Alto desempenho;
+* Retorno vazio;
+* Tipo de operação;
+* Data da operação.
+
+Resultado:
+
+* Piso mínimo estimado;
+* Memória de cálculo;
+* CCD utilizado;
+* CC utilizado;
+* Versão da tabela;
+* Data de vigência;
+* Fonte;
+* Alertas;
+* Botão para abrir a calculadora oficial;
+* Botão “Usar em uma nova cotação”;
+* Botão “Comparar com valor comercial”;
+* Botão para salvar a consulta.
+
+Permitir acessar a calculadora:
+
+* Pelo menu;
+* Dentro da cotação;
+* Pela tela de revisão;
+* Pela visualização da proposta.
+
+---
+
+# 18. COMPOSIÇÃO DO VALOR
+
+Criar uma tela detalhada com seções:
+
+## Operação
+
+* Distância;
+* Duração estimada;
+* Veículo;
+* Carroceria;
+* Peso;
+* Cubagem;
+* Quantidade de veículos.
+
+## Custos
+
+* Combustível;
+* Pedágio;
+* Manutenção;
+* Pneus;
+* Motorista;
+* Diária;
+* Carga;
+* Descarga;
+* Seguro;
+* Rastreamento;
+* Gerenciamento de risco;
+* Outros.
+
+## Resultado financeiro
+
+* Custo operacional;
+* Margem aplicada;
+* Valor líquido;
+* Tributos;
+* Valor bruto;
+* Valor por quilômetro;
+* Valor por tonelada.
+
+## ANTT
+
+* Valor sugerido;
+* Diferença em reais;
+* Diferença percentual;
+* Situação: acima, igual ou abaixo;
+* Versão da tabela;
+* Data da referência.
+
+Permitir expandir e recolher cada grupo.
+
+Permitir ao usuário autorizado editar componentes antes de concluir.
+
+Registrar o valor original e o valor alterado.
+
+---
+
+# 19. GERAÇÃO DE ORÇAMENTO E PROPOSTA
+
+Gerar documento profissional em PDF.
+
+## Cabeçalho
+
+* Logotipo;
+* Nome da transportadora;
+* CNPJ;
+* Telefone;
+* E-mail;
+* Endereço comercial;
+* Número do orçamento ou proposta;
+* Data;
+* Validade;
+* Responsável.
+
+## Cliente
+
+* Razão social ou nome;
+* CNPJ ou CPF parcialmente mascarado;
+* Contato;
+* E-mail;
+* Telefone.
+
+## Operação
+
+* Origem;
+* Destino;
+* Distância;
+* Data prevista;
+* Tipo de carga;
+* Modalidade;
+* Peso;
+* Cubagem;
+* Dimensões;
+* Veículo;
+* Carroceria;
+* Serviços adicionais.
+
+## Valores
+
+No documento destinado ao cliente, permitir configurar se serão exibidos:
+
+* Valor total;
+* Tributos;
+* Seguro;
+* Carga e descarga;
+* Pedágio;
+* Outros componentes.
+
+Não exibir custos internos ou margem no PDF do cliente.
+
+Criar também um relatório interno com a composição completa.
+
+## Condições comerciais
+
+* Prazo de pagamento;
+* Validade;
+* Prazo estimado;
+* Responsabilidade por carga;
+* Responsabilidade por descarga;
+* Condições de seguro;
+* Restrições;
+* Observações;
+* Termos da proposta.
+
+## Assinatura
+
+* Nome do responsável;
+* Cargo;
+* Espaço para assinatura;
+* Aceite digital futuro.
+
+Permitir:
+
+* Visualizar;
+* Salvar;
+* Compartilhar;
+* Enviar por e-mail;
+* Enviar por WhatsApp;
+* Duplicar;
+* Criar nova versão;
+* Converter orçamento em proposta.
+
+---
+
+# 20. STATUS
+
+## Orçamento
+
+* Rascunho;
+* Calculado;
+* Enviado;
+* Expirado;
+* Convertido;
+* Cancelado.
+
+## Proposta
+
+* Rascunho;
+* Em análise;
+* Enviada;
+* Visualizada;
+* Em negociação;
+* Aprovada;
+* Recusada;
+* Expirada;
+* Cancelada.
+
+Registrar histórico de cada alteração.
+
+---
+
+# 21. NUMERAÇÃO
+
+Gerar identificadores únicos:
+
+```text
+ORC-2026-000001
+PRO-2026-000001
+ANTT-2026-000001
+```
+
+A geração deve ocorrer no backend para impedir duplicidade.
+
+---
+
+# 22. DASHBOARD
+
+Criar dashboard com:
+
+* Cotações do mês;
+* Propostas do mês;
+* Valor total cotado;
+* Valor total aprovado;
+* Taxa de conversão;
+* Ticket médio;
+* Propostas próximas do vencimento;
+* Propostas abaixo da margem mínima;
+* Cotações abaixo da referência ANTT;
+* Principais clientes;
+* Principais destinos;
+* Veículos mais recomendados;
+* Últimas atividades.
+
+Adicionar filtros por:
+
+* Período;
+* Cliente;
+* Vendedor;
+* Status;
+* Origem;
+* Destino;
+* Veículo.
+
+---
+
+# 23. HISTÓRICO E AUDITORIA
+
+Registrar:
+
+* Usuário;
+* Data e hora;
+* Ação;
+* Registro alterado;
+* Valor anterior;
+* Valor novo;
+* Motivo;
+* Dispositivo;
+* Versão do aplicativo.
+
+Auditar especialmente:
+
+* Alteração de impostos;
+* Alteração de custos;
+* Alteração da margem;
+* Desconto;
+* Troca manual do veículo;
+* Distância manual;
+* Valor abaixo da ANTT;
+* Cancelamento;
+* Exclusão lógica;
+* Aprovação.
+
+Não excluir definitivamente dados comerciais sem política administrativa.
+
+Utilizar soft delete quando apropriado.
+
+---
+
+# 24. BANCO DE DADOS
+
+Criar inicialmente as entidades:
+
+* User;
+* Role;
+* Permission;
+* Customer;
+* CustomerAddress;
+* CustomerContact;
+* FreightQuote;
+* FreightQuoteVersion;
+* FreightProposal;
+* FreightProposalVersion;
+* FreightRoute;
+* FreightCargo;
+* FreightCargoItem;
+* FreightService;
+* VehicleCategory;
+* BodyType;
+* TaxRule;
+* CostRule;
+* MarginRule;
+* AnttTableVersion;
+* AnttCoefficient;
+* AnttCalculation;
+* FreightCalculation;
+* FreightCalculationItem;
+* CompanySettings;
+* DocumentTemplate;
+* AuditLog.
+
+Utilizar UUID para identificadores internos.
+
+Criar índices adequados.
+
+Definir relacionamentos, constraints, datas de criação, atualização, exclusão lógica e usuário responsável.
+
+---
+
+# 25. ORGANIZAÇÃO DO PROJETO
+
+Utilizar estrutura semelhante a:
+
+```text
+lib/
+  app/
+    app.dart
+    bootstrap.dart
+    router/
+    theme/
+    localization/
+    dependencies/
+
+  core/
+    errors/
+    result/
+    network/
+    database/
+    security/
+    validation/
+    formatting/
+    logging/
+    widgets/
+
+  features/
+    authentication/
+      data/
+      domain/
+      presentation/
+
+    customers/
+      data/
+      domain/
+      presentation/
+
+    locations/
+      data/
+      domain/
+      presentation/
+
+    maps/
+      data/
+      domain/
+      presentation/
+
+    vehicle_catalog/
+      data/
+      domain/
+      presentation/
+
+    taxes/
+      data/
+      domain/
+      presentation/
+
+    costs/
+      data/
+      domain/
+      presentation/
+
+    freight_quotes/
+      data/
+      domain/
+      presentation/
+
+    freight_proposals/
+      data/
+      domain/
+      presentation/
+
+    freight_calculation/
+      data/
+      domain/
+      presentation/
+
+    antt_freight_floor/
+      data/
+      domain/
+      presentation/
+
+    documents/
+      data/
+      domain/
+      presentation/
+
+    dashboard/
+      data/
+      domain/
+      presentation/
+
+    audit/
+      data/
+      domain/
+      presentation/
+```
+
+Cada feature deve possuir:
+
+```text
+data/
+  datasources/
+  dtos/
+  mappers/
+  repositories/
+
+domain/
+  entities/
+  repositories/
+  services/
+  usecases/
+
+presentation/
+  controllers/
+  pages/
+  widgets/
+  state/
+```
+
+---
+
+# 26. TRATAMENTO DE ERROS
+
+Criar erros tipados:
+
+* NetworkFailure;
+* ValidationFailure;
+* AuthenticationFailure;
+* PermissionFailure;
+* NotFoundFailure;
+* LocationFailure;
+* RouteFailure;
+* ExternalApiFailure;
+* AnttCalculationFailure;
+* PricingFailure;
+* DocumentGenerationFailure;
+* StorageFailure;
+* UnexpectedFailure.
+
+Utilizar uma estrutura como:
+
+```dart
+sealed class Result<T> {
+  const Result();
+}
+
+final class Success<T> extends Result<T> {
+  final T value;
+  const Success(this.value);
+}
+
+final class Failure<T> extends Result<T> {
+  final AppFailure error;
+  const Failure(this.error);
+}
+```
+
+Exibir mensagens amigáveis ao usuário e detalhes técnicos somente nos logs.
+
+---
+
+# 27. SEGURANÇA
+
+Implementar:
+
+* HTTPS;
+* Tokens seguros;
+* Flutter Secure Storage;
+* Proteção de rotas;
+* Controle por perfil;
+* Validação no cliente e no servidor;
+* Sanitização de entrada;
+* Rate limiting no backend;
+* Logs sem dados sensíveis;
+* Mascaramento de CPF e CNPJ;
+* Criptografia adequada;
+* Política de expiração de sessão;
+* Backup;
+* Auditoria;
+* Consentimento e política de privacidade;
+* Adequação à LGPD;
+* Segredos somente em variáveis de ambiente;
+* Nenhuma chave privada dentro do aplicativo;
+* APIs sensíveis acessadas pelo backend.
+
+Criar arquivos:
+
+```text
+.env.example
+README_SECURITY.md
+PRIVACY_POLICY_TEMPLATE.md
+```
+
+Não salvar tokens, senhas ou chaves no Git.
+
+---
+
+# 28. EXPERIÊNCIA DO USUÁRIO
+
+Criar visual:
+
+* Profissional;
+* Empresarial;
+* Moderno;
+* Claro;
+* Responsivo;
+* Simples para equipes comerciais;
+* Adequado para celular, tablet e web.
+
+Criar:
+
+* Tema claro;
+* Tema escuro;
+* Indicadores de progresso;
+* Skeleton loading;
+* Estados vazios;
+* Mensagens de erro;
+* Confirmações;
+* Pesquisa;
+* Filtros;
+* Ordenação;
+* Paginação;
+* Acessibilidade;
+* Contraste adequado;
+* Tamanhos de toque apropriados;
+* Navegação por teclado na versão web.
+
+No formulário de cotação:
+
+* Salvar rascunho automaticamente;
+* Mostrar progresso;
+* Validar cada etapa;
+* Não perder informações;
+* Permitir voltar;
+* Exibir resumo lateral em telas grandes;
+* Exibir resumo inferior em celulares.
+
+---
+
+# 29. MODO OFFLINE
+
+Preparar o aplicativo para:
+
+* Consultar cadastros recentes offline;
+* Criar rascunhos offline;
+* Salvar cotação parcialmente;
+* Sincronizar posteriormente;
+* Resolver conflitos;
+* Mostrar status de sincronização.
+
+Cálculos locais podem funcionar offline quando os parâmetros necessários estiverem sincronizados.
+
+Consultas de CNPJ, mapa, rota e fontes externas exigirão conexão.
+
+---
+
+# 30. TESTES
+
+Criar:
+
+## Testes unitários
+
+* Validação de CPF;
+* Validação de CNPJ;
+* Cubagem;
+* Peso cubado;
+* Recomendação de veículo;
+* Custos;
+* Margem;
+* Tributos;
+* Valor líquido;
+* Valor bruto;
+* Cálculo ANTT;
+* Arredondamento;
+* Vigência das regras.
+
+## Testes de widget
+
+* Cadastro de cliente;
+* Seleção de orçamento ou proposta;
+* Cadastro rápido dentro da cotação;
+* Formulário em etapas;
+* Exibição da composição;
+* Tratamento de erro;
+* Calculadora ANTT.
+
+## Testes de integração
+
+* Login;
+* Cadastro;
+* Criação de orçamento;
+* Conversão em proposta;
+* Cálculo de rota;
+* Geração de PDF;
+* Persistência;
+* Sincronização.
+
+Utilizar mocks e fakes para APIs externas.
+
+Não utilizar APIs pagas durante testes automatizados.
+
+---
+
+# 31. CI/CD E QUALIDADE
+
+Configurar:
+
+* `flutter analyze`;
+* `dart format`;
+* Testes automatizados;
+* Cobertura;
+* Build Android;
+* Build iOS;
+* Build web;
+* Ambientes development, staging e production;
+* Variáveis por ambiente;
+* GitHub Actions ou GitLab CI;
+* Conventional Commits;
+* Versionamento semântico;
+* Changelog;
+* Lints rigorosos.
+
+Criar:
+
+```text
+analysis_options.yaml
+README.md
+CONTRIBUTING.md
+CHANGELOG.md
+docs/architecture.md
+docs/business_rules.md
+docs/integrations.md
+docs/antt_calculation.md
+```
+
+---
+
+# 32. DESENVOLVIMENTO EM ETAPAS
+
+Não tente implementar todo o sistema em um único arquivo ou uma única resposta.
+
+## Fase 1 — Fundação
+
+Entregar:
+
+* Estrutura Flutter;
+* Tema;
+* Navegação;
+* Injeção de dependências;
+* Tratamento de erros;
+* Ambientes;
+* Persistência local;
+* Autenticação simulada;
+* README.
+
+## Fase 2 — Clientes
+
+Entregar:
+
+* Cadastro de pessoa física e jurídica;
+* Validação de CPF e CNPJ;
+* Consulta de CNPJ por interface;
+* Endereços;
+* Pesquisa;
+* Testes.
+
+## Fase 3 — Mapas e rotas
+
+Entregar:
+
+* Pesquisa de cidades;
+* Geocodificação;
+* Mapa;
+* Origem e destino;
+* Distância;
+* Cache;
+* Entrada manual;
+* Testes.
+
+## Fase 4 — Catálogo operacional
+
+Entregar:
+
+* Veículos;
+* Carrocerias;
+* Tipos de carga;
+* Modalidades;
+* Serviços adicionais;
+* Recomendação de veículo.
+
+## Fase 5 — Motor financeiro
+
+Entregar:
+
+* Custos;
+* Impostos;
+* Margens;
+* Motor de cálculo;
+* Memória de cálculo;
+* Testes completos.
+
+## Fase 6 — ANTT
+
+Entregar:
+
+* Cadastro de versões;
+* Importação de coeficientes;
+* Calculadora;
+* Comparação;
+* Link oficial;
+* Histórico;
+* Testes.
+
+## Fase 7 — Orçamentos e propostas
+
+Entregar:
+
+* Formulário em etapas;
+* Cadastro rápido de cliente;
+* Salvamento automático;
+* Versionamento;
+* Status;
+* PDF;
+* Compartilhamento.
+
+## Fase 8 — Dashboard e auditoria
+
+Entregar:
+
+* Indicadores;
+* Relatórios;
+* Logs;
+* Filtros;
+* Permissões.
+
+---
+
+# 33. PRIMEIRA ENTREGA ESPERADA DO CODEX
+
+Antes de gerar todo o código:
+
+1. Analise os requisitos;
+2. Liste riscos técnicos;
+3. Liste integrações que exigem credenciais;
+4. Identifique regras que precisam ser configuráveis;
+5. Proponha o modelo de dados;
+6. Apresente a arquitetura;
+7. Apresente o fluxo das principais telas;
+8. Apresente a estratégia de cálculo;
+9. Apresente a estratégia para a ANTT;
+10. Crie o plano de implementação;
+11. Somente depois inicie a Fase 1.
+
+Na Fase 1, gere arquivos completos e executáveis.
+
+Não use pseudocódigo onde código real for solicitado.
+
+Não omita imports.
+
+Não crie arquivos gigantes.
+
+Não use dados sensíveis reais.
+
+Inclua instruções exatas para executar:
+
+```bash
+flutter pub get
+dart run build_runner build --delete-conflicting-outputs
+flutter analyze
+flutter test
+flutter run
+```
+
+Ao terminar cada fase:
+
+* Liste os arquivos criados;
+* Explique as decisões;
+* Informe como testar;
+* Informe limitações;
+* Informe o próximo passo;
+* Aguarde a solicitação para avançar para a fase seguinte.
+
+---
+
+# 34. CRITÉRIOS DE ACEITE DO MVP
+
+O MVP será considerado funcional quando permitir:
+
+1. Fazer login;
+2. Cadastrar cliente por CPF ou CNPJ;
+3. Consultar e preencher CNPJ por integração configurável;
+4. Criar orçamento sem cliente;
+5. Criar proposta com cliente;
+6. Cadastrar cliente sem sair da cotação;
+7. Pesquisar origem e destino;
+8. Exibir rota no mapa;
+9. Calcular distância;
+10. Cadastrar os dados da carga;
+11. Calcular cubagem;
+12. Recomendar veículo;
+13. Selecionar carroceria;
+14. Configurar custos, margens e tributos;
+15. Calcular valor líquido e bruto;
+16. Calcular ou registrar referência ANTT;
+17. Comparar o preço comercial com a ANTT;
+18. Gerar PDF profissional;
+19. Salvar histórico;
+20. Compartilhar a proposta.
+
+Construa o FreteCerto como um produto real, seguro, escalável e preparado para futuras integrações com emissão fiscal, CIOT, MDF-e, rastreamento, telemetria e gestão operacional.
