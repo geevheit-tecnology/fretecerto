@@ -7,7 +7,9 @@ import '../../antt/application/antt_official_consultation_service.dart';
 import '../application/location_distance_service.dart';
 import '../application/quote_pdf_service.dart';
 import '../domain/quote_input.dart';
+import '../domain/saved_quote.dart';
 import 'quote_controller.dart';
+import 'quote_history_controller.dart';
 
 class QuotePage extends ConsumerWidget {
   const QuotePage({super.key});
@@ -181,6 +183,44 @@ class QuotePage extends ConsumerWidget {
                     ),
                   ),
                   _SegmentCard(
+                    title: 'Custos da viagem',
+                    child: Column(
+                      children: [
+                        _MoneyField(
+                          label: 'Pedagio ida',
+                          value: input.toll,
+                          onChanged: (value) =>
+                              _update(ref, input, toll: value),
+                        ),
+                        _MoneyField(
+                          label: 'Carga',
+                          value: input.loadingFee,
+                          onChanged: (value) =>
+                              _update(ref, input, loadingFee: value),
+                        ),
+                        _MoneyField(
+                          label: 'Descarga',
+                          value: input.unloadingFee,
+                          onChanged: (value) =>
+                              _update(ref, input, unloadingFee: value),
+                        ),
+                        _MoneyField(
+                          label: 'Outros variaveis',
+                          value: input.otherVariableCosts,
+                          onChanged: (value) =>
+                              _update(ref, input, otherVariableCosts: value),
+                        ),
+                        _NumberField(
+                          label: 'Viagens por mes',
+                          suffix: 'viagens',
+                          value: input.monthlyTrips,
+                          onChanged: (value) =>
+                              _update(ref, input, monthlyTrips: value),
+                        ),
+                      ],
+                    ),
+                  ),
+                  _SegmentCard(
                     title: 'Resultado comercial',
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -194,6 +234,15 @@ class QuotePage extends ConsumerWidget {
                           'Custo operacional',
                           brl(quote.operationalCost),
                         ),
+                        _ResultRow(
+                          'Distancia total',
+                          '${quote.totalDistanceKm.toStringAsFixed(0)} km',
+                        ),
+                        _ResultRow(
+                          'Custos variaveis',
+                          brl(quote.totalVariableCosts),
+                        ),
+                        _ResultRow('Custos fixos', brl(quote.totalFixedCosts)),
                         _ResultRow('Seguro', brl(quote.insuranceValue)),
                         _ResultRow('Ad valorem', brl(quote.adValoremValue)),
                         _ResultRow('Lucro / margem', brl(quote.marginValue)),
@@ -205,6 +254,14 @@ class QuotePage extends ConsumerWidget {
                         Text(
                           brl(quote.commercialValue),
                           style: Theme.of(context).textTheme.displaySmall,
+                        ),
+                        _ResultRow(
+                          'Custo por km',
+                          '${brl(quote.costPerKm)} / km',
+                        ),
+                        _ResultRow(
+                          'Preco por km',
+                          '${brl(quote.minimumValuePerKm)} / km',
                         ),
                         const SizedBox(height: 8),
                         _AnttBadge(isBelowAntt: quote.isBelowAntt),
@@ -236,19 +293,33 @@ class QuotePage extends ConsumerWidget {
               Card(
                 child: Padding(
                   padding: const EdgeInsets.all(16),
-                  child: Row(
+                  child: Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
                       const Icon(Icons.info_outline),
-                      const SizedBox(width: 12),
-                      const Expanded(
-                        child: Text(
+                      SizedBox(
+                        width: MediaQuery.sizeOf(context).width < 760
+                            ? double.infinity
+                            : 520,
+                        child: const Text(
                           'Calculo comercial estimativo. Parametros fiscais, custos, margens e piso ANTT devem ser validados pela administracao.',
                         ),
                       ),
                       FilledButton.icon(
                         onPressed: () async {
                           final pdf = await const QuotePdfService()
-                              .buildExecutiveQuote(input: input, quote: quote);
+                              .buildExecutiveQuote(
+                                input: input,
+                                quote: quote,
+                                quoteType: form.quoteType,
+                                customerName: form.customerName,
+                                sellerName: form.sellerName,
+                                origin: form.origin,
+                                destination: form.destination,
+                                cargoType: form.cargoType,
+                              );
                           await Printing.layoutPdf(
                             name: 'proposta-fretecerto.pdf',
                             onLayout: (_) async => pdf,
@@ -256,6 +327,35 @@ class QuotePage extends ConsumerWidget {
                         },
                         icon: const Icon(Icons.picture_as_pdf_outlined),
                         label: const Text('Gerar PDF'),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: () {
+                          final createdAt = DateTime.now();
+                          ref
+                              .read(quoteHistoryProvider.notifier)
+                              .save(
+                                SavedQuote(
+                                  id: createdAt.microsecondsSinceEpoch
+                                      .toString(),
+                                  createdAt: createdAt,
+                                  customerName: form.customerName,
+                                  origin: form.origin,
+                                  destination: form.destination,
+                                  cargoType: form.cargoType,
+                                  suggestedVehicle: quote.suggestedVehicle,
+                                  commercialValue: quote.commercialValue,
+                                  minimumAnttValue: quote.minimumAnttValue,
+                                  isBelowAntt: quote.isBelowAntt,
+                                ),
+                              );
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Cotacao salva no historico.'),
+                            ),
+                          );
+                        },
+                        icon: const Icon(Icons.save_outlined),
+                        label: const Text('Salvar'),
                       ),
                     ],
                   ),
@@ -277,6 +377,11 @@ class QuotePage extends ConsumerWidget {
     double? invoiceValue,
     double? marginPercent,
     double? minimumAntt,
+    double? toll,
+    double? loadingFee,
+    double? unloadingFee,
+    double? otherVariableCosts,
+    double? monthlyTrips,
   }) {
     ref
         .read(quoteInputProvider.notifier)
@@ -287,9 +392,9 @@ class QuotePage extends ConsumerWidget {
             totalVolumeM3: totalVolumeM3 ?? input.totalVolumeM3,
             invoiceValue: invoiceValue ?? input.invoiceValue,
             marginPercent: marginPercent ?? input.marginPercent,
-            toll: input.toll,
-            loadingFee: input.loadingFee,
-            unloadingFee: input.unloadingFee,
+            toll: toll ?? input.toll,
+            loadingFee: loadingFee ?? input.loadingFee,
+            unloadingFee: unloadingFee ?? input.unloadingFee,
             icmsPercent: input.icmsPercent,
             pisPercent: input.pisPercent,
             cofinsPercent: input.cofinsPercent,
@@ -297,6 +402,20 @@ class QuotePage extends ConsumerWidget {
             insurancePercent: input.insurancePercent,
             trackingFee: input.trackingFee,
             minimumAntt: minimumAntt ?? input.minimumAntt,
+            consumptionKmPerLiter: input.consumptionKmPerLiter,
+            dieselLiterPrice: input.dieselLiterPrice,
+            arlaPercent: input.arlaPercent,
+            arlaLiterPrice: input.arlaLiterPrice,
+            maintenanceCostPerKm: input.maintenanceCostPerKm,
+            tireCostPerKm: input.tireCostPerKm,
+            otherVariableCosts: otherVariableCosts ?? input.otherVariableCosts,
+            vehicleDepreciationMonthly: input.vehicleDepreciationMonthly,
+            driverSalaryMonthly: input.driverSalaryMonthly,
+            driverBurdenPercent: input.driverBurdenPercent,
+            vehicleInsuranceYearly: input.vehicleInsuranceYearly,
+            administrativeCostsMonthly: input.administrativeCostsMonthly,
+            otherFixedCostsPerTrip: input.otherFixedCostsPerTrip,
+            monthlyTrips: monthlyTrips ?? input.monthlyTrips,
           ),
         );
   }
@@ -568,6 +687,58 @@ class _PercentFieldState extends State<_PercentField> {
         controller: _controller,
         keyboardType: const TextInputType.numberWithOptions(decimal: true),
         decoration: InputDecoration(labelText: widget.label, suffixText: '%'),
+        onChanged: (value) {
+          final parsed = double.tryParse(value.replaceAll(',', '.'));
+          if (parsed != null) widget.onChanged(parsed);
+        },
+      ),
+    );
+  }
+}
+
+class _NumberField extends StatefulWidget {
+  const _NumberField({
+    required this.label,
+    required this.suffix,
+    required this.value,
+    required this.onChanged,
+  });
+
+  final String label;
+  final String suffix;
+  final double value;
+  final ValueChanged<double> onChanged;
+
+  @override
+  State<_NumberField> createState() => _NumberFieldState();
+}
+
+class _NumberFieldState extends State<_NumberField> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.value.toStringAsFixed(0));
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: TextField(
+        controller: _controller,
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        decoration: InputDecoration(
+          labelText: widget.label,
+          suffixText: widget.suffix,
+        ),
         onChanged: (value) {
           final parsed = double.tryParse(value.replaceAll(',', '.'));
           if (parsed != null) widget.onChanged(parsed);

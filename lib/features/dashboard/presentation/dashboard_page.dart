@@ -1,13 +1,27 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/formatters/brl.dart';
+import '../../quote/domain/saved_quote.dart';
+import '../../quote/presentation/quote_history_controller.dart';
 
-class DashboardPage extends StatelessWidget {
+class DashboardPage extends ConsumerWidget {
   const DashboardPage({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final quotes = ref.watch(quoteHistoryProvider);
+    final openQuotes = quotes.length;
+    final wallet = quotes.fold<double>(
+      0,
+      (total, quote) => total + quote.commercialValue,
+    );
+    final pendingAntt = quotes
+        .where((quote) => quote.minimumAnttValue <= 0)
+        .length;
+    final approvedForSale = quotes.where((quote) => !quote.isBelowAntt).length;
+
     return CustomScrollView(
       slivers: [
         SliverAppBar.large(
@@ -37,23 +51,23 @@ class DashboardPage extends StatelessWidget {
                       _MetricCard(
                         width: compact ? constraints.maxWidth : 260,
                         icon: Icons.request_quote,
-                        label: 'Cotacoes abertas',
-                        value: '18',
-                        detail: '7 aguardando retorno',
+                        label: 'Cotacoes salvas',
+                        value: '$openQuotes',
+                        detail: '$pendingAntt sem piso ANTT',
                       ),
                       _MetricCard(
                         width: compact ? constraints.maxWidth : 260,
                         icon: Icons.trending_up,
                         label: 'Carteira prevista',
-                        value: brl(184730),
-                        detail: 'Este mes',
+                        value: brl(wallet),
+                        detail: 'Historico da sessao',
                       ),
                       _MetricCard(
                         width: compact ? constraints.maxWidth : 260,
                         icon: Icons.verified_outlined,
-                        label: 'Conversao',
-                        value: '41%',
-                        detail: 'Propostas aprovadas',
+                        label: 'Dentro da politica',
+                        value: '$approvedForSale',
+                        detail: 'Acima do piso informado',
                       ),
                     ],
                   );
@@ -67,28 +81,15 @@ class DashboardPage extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Fila de propostas',
+                        'Historico de cotacoes',
                         style: Theme.of(context).textTheme.titleLarge,
                       ),
                       const SizedBox(height: 12),
-                      const _ProposalTile(
-                        company: 'Forte Expressa',
-                        route: 'Guarulhos, SP -> Contagem, MG',
-                        amount: 8920,
-                        status: 'Em negociacao',
-                      ),
-                      const _ProposalTile(
-                        company: 'Delta Pecas Industriais',
-                        route: 'Campinas, SP -> Joinville, SC',
-                        amount: 6140,
-                        status: 'Aguardando aceite',
-                      ),
-                      const _ProposalTile(
-                        company: 'Rota Farma',
-                        route: 'Osasco, SP -> Curitiba, PR',
-                        amount: 4760,
-                        status: 'Precisa revisar ANTT',
-                      ),
+                      if (quotes.isEmpty)
+                        const _EmptyHistory()
+                      else
+                        for (final quote in quotes)
+                          _ProposalTile.fromQuote(quote),
                     ],
                   ),
                 ),
@@ -153,6 +154,19 @@ class _ProposalTile extends StatelessWidget {
   final double amount;
   final String status;
 
+  factory _ProposalTile.fromQuote(SavedQuote quote) {
+    return _ProposalTile(
+      company: quote.customerName,
+      route: '${quote.origin} -> ${quote.destination}',
+      amount: quote.commercialValue,
+      status: quote.isBelowAntt
+          ? 'Revisar piso ANTT'
+          : quote.minimumAnttValue <= 0
+          ? 'ANTT nao informado'
+          : 'Pronto para proposta',
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return ListTile(
@@ -167,6 +181,27 @@ class _ProposalTile extends StatelessWidget {
           Text(brl(amount), style: Theme.of(context).textTheme.titleMedium),
           Text(status, style: Theme.of(context).textTheme.bodySmall),
         ],
+      ),
+    );
+  }
+}
+
+class _EmptyHistory extends StatelessWidget {
+  const _EmptyHistory();
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: const CircleAvatar(child: Icon(Icons.save_outlined)),
+      title: const Text('Nenhuma cotacao salva ainda'),
+      subtitle: const Text(
+        'Salve uma cotacao para acompanhar a fila comercial.',
+      ),
+      trailing: FilledButton.icon(
+        onPressed: () => context.go('/cotacao'),
+        icon: const Icon(Icons.add),
+        label: const Text('Criar'),
       ),
     );
   }

@@ -22,12 +22,19 @@ void main() {
 
     expect(quote.suggestedVehicle, 'VUC');
     expect(quote.bodyType, 'Bau');
-    expect(quote.icmsValue, closeTo(452.84, 0.01));
-    expect(quote.pisValue, closeTo(62.27, 0.01));
-    expect(quote.cofinsValue, closeTo(286.80, 0.01));
+    expect(quote.totalDistanceKm, 856);
+    expect(quote.fuelCost, closeTo(2088.64, 0.01));
+    expect(quote.arlaCost, closeTo(77.04, 0.01));
+    expect(quote.totalVariableCosts, closeTo(3810.28, 0.01));
+    expect(quote.totalFixedCosts, closeTo(1285, 0.01));
+    expect(quote.operationalCost, closeTo(5095.28, 0.01));
+    expect(quote.icmsValue, closeTo(776.19, 0.01));
+    expect(quote.pisValue, closeTo(106.73, 0.01));
+    expect(quote.cofinsValue, closeTo(491.59, 0.01));
     expect(quote.adValoremValue, closeTo(105, 0.01));
-    expect(quote.marginValue, closeTo(635.05, 0.01));
-    expect(quote.commercialValue, closeTo(4575.55, 0.01));
-    expect(quote.isBelowAntt, isTrue);
+    expect(quote.marginValue, closeTo(1120.96, 0.01));
+    expect(quote.commercialValue, closeTo(7842.74, 0.01));
+    expect(quote.minimumValuePerKm, closeTo(9.16, 0.01));
+    expect(quote.isBelowAntt, isFalse);
   });
 }

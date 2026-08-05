@@ -14,6 +14,12 @@ class QuotePdfService {
   Future<Uint8List> buildExecutiveQuote({
     required QuoteInput input,
     required FreightQuote quote,
+    String quoteType = 'Orcamento comercial',
+    String customerName = 'Forte Expressa',
+    String sellerName = 'Comercial interno',
+    String origin = 'Guarulhos, SP',
+    String destination = 'Contagem, MG',
+    String cargoType = 'Carga seca paletizada',
   }) async {
     final document = pw.Document(
       title: 'Proposta comercial de frete',
@@ -41,20 +47,28 @@ class QuotePdfService {
             children: [
               pw.Expanded(
                 child: _section('Cliente e validade', [
-                  _line('Solicitante', 'Forte Expressa'),
-                  _line('Tipo', 'Orcamento comercial'),
-                  _line('Vendedor', 'Comercial interno'),
+                  _line('Solicitante', customerName),
+                  _line('Tipo', quoteType),
+                  _line('Vendedor', sellerName),
                   _line('Validade', '7 dias corridos'),
                 ]),
               ),
               pw.SizedBox(width: 14),
               pw.Expanded(
                 child: _section('Rota operacional', [
-                  _line('Origem', 'Guarulhos, SP'),
-                  _line('Destino', 'Contagem, MG'),
+                  _line('Origem', origin),
+                  _line('Destino', destination),
                   _line(
-                    'Distancia',
-                    '${input.distanceKm.toStringAsFixed(0)} km',
+                    'Distancia total',
+                    '${quote.totalDistanceKm.toStringAsFixed(0)} km',
+                  ),
+                  _line(
+                    'Ida',
+                    '${quote.outboundDistanceKm.toStringAsFixed(0)} km',
+                  ),
+                  _line(
+                    'Retorno',
+                    '${quote.returnDistanceKm.toStringAsFixed(0)} km',
                   ),
                   _line('Modalidade', 'Rodoviario dedicado'),
                 ]),
@@ -63,7 +77,7 @@ class QuotePdfService {
           ),
           pw.SizedBox(height: 14),
           _section('Carga e recomendacao', [
-            _line('Descricao', 'Carga seca paletizada'),
+            _line('Descricao', cargoType),
             _line('Peso total', '${input.totalWeightKg.toStringAsFixed(0)} kg'),
             _line('Cubagem', '${input.totalVolumeM3.toStringAsFixed(1)} m3'),
             _line('Veiculo recomendado', quote.suggestedVehicle),
@@ -169,16 +183,38 @@ class QuotePdfService {
 
   static pw.Widget _commercialTable(QuoteInput input, FreightQuote quote) {
     final rows = [
-      ['Custo operacional', brl(quote.operationalCost)],
+      [
+        'Combustivel (${quote.fuelLiters.toStringAsFixed(1)} l)',
+        brl(quote.fuelCost),
+      ],
+      [
+        'Arla 32 (${quote.arlaLiters.toStringAsFixed(1)} l)',
+        brl(quote.arlaCost),
+      ],
+      ['Pedagio ida e volta', brl(quote.tollCost)],
+      ['Lubrificantes / manutencao', brl(quote.maintenanceCost)],
+      ['Pneus / depreciacao por km', brl(quote.tireCost)],
+      ['Carga e descarga', brl(input.loadingFee + input.unloadingFee)],
+      ['Rastreamento / gerenciamento', brl(input.trackingFee)],
+      ['Demais variaveis', brl(quote.otherVariableCosts)],
+      ['Total custos variaveis', brl(quote.totalVariableCosts)],
+      ['Depreciacao do veiculo', brl(quote.vehicleDepreciationCost)],
+      ['Salario motorista', brl(quote.driverSalaryCost)],
+      ['Encargos motorista', brl(quote.driverBurdenCost)],
+      ['Seguro do veiculo', brl(quote.vehicleInsuranceCost)],
+      ['Despesas administrativas', brl(quote.administrativeCost)],
+      ['Outras despesas fixas', brl(quote.otherFixedCosts)],
+      ['Total custos fixos', brl(quote.totalFixedCosts)],
+      ['Custo total da viagem', brl(quote.operationalCost)],
       ['Seguro sobre NF', brl(quote.insuranceValue)],
       ['Ad valorem', brl(quote.adValoremValue)],
       ['Lucro / margem', brl(quote.marginValue)],
       ['ICMS', brl(quote.icmsValue)],
       ['PIS', brl(quote.pisValue)],
       ['COFINS', brl(quote.cofinsValue)],
-      ['Pedagio informado', brl(input.toll)],
-      ['Carga e descarga', brl(input.loadingFee + input.unloadingFee)],
       ['Piso ANTT configurado', brl(quote.minimumAnttValue)],
+      ['Custo por km rodado', '${brl(quote.costPerKm)} / km'],
+      ['Preco minimo por km', '${brl(quote.minimumValuePerKm)} / km'],
       ['Valor final ao cliente', brl(quote.commercialValue)],
     ];
 

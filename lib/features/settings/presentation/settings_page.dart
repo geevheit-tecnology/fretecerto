@@ -1,10 +1,20 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-class SettingsPage extends StatelessWidget {
+import '../../../core/formatters/brl.dart';
+import '../../quote/domain/quote_input.dart';
+import '../../quote/presentation/quote_controller.dart';
+
+class SettingsPage extends ConsumerWidget {
   const SettingsPage({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final input = ref.watch(quoteInputProvider);
+    final notifier = ref.read(quoteInputProvider.notifier);
+
+    void update(QuoteInput next) => notifier.replace(next);
+
     return CustomScrollView(
       slivers: [
         const SliverAppBar.large(title: Text('Configuracoes')),
@@ -15,44 +25,160 @@ class SettingsPage extends StatelessWidget {
               Wrap(
                 spacing: 16,
                 runSpacing: 16,
-                children: const [
+                children: [
                   _ConfigCard(
                     icon: Icons.percent,
-                    title: 'Impostos e taxas',
-                    fields: [
-                      'ICMS origem/destino',
-                      'PIS',
-                      'COFINS',
-                      'Ad valorem',
-                      'Seguro',
-                      'GRIS',
+                    title: 'Impostos e risco',
+                    children: [
+                      _ParameterField(
+                        label: 'ICMS',
+                        suffix: '%',
+                        value: input.icmsPercent,
+                        onChanged: (value) =>
+                            update(input.copyWith(icmsPercent: value)),
+                      ),
+                      _ParameterField(
+                        label: 'PIS',
+                        suffix: '%',
+                        value: input.pisPercent,
+                        onChanged: (value) =>
+                            update(input.copyWith(pisPercent: value)),
+                      ),
+                      _ParameterField(
+                        label: 'COFINS',
+                        suffix: '%',
+                        value: input.cofinsPercent,
+                        onChanged: (value) =>
+                            update(input.copyWith(cofinsPercent: value)),
+                      ),
+                      _ParameterField(
+                        label: 'Ad valorem',
+                        suffix: '%',
+                        value: input.adValoremPercent,
+                        onChanged: (value) =>
+                            update(input.copyWith(adValoremPercent: value)),
+                      ),
+                      _ParameterField(
+                        label: 'Seguro NF',
+                        suffix: '%',
+                        value: input.insurancePercent,
+                        onChanged: (value) =>
+                            update(input.copyWith(insurancePercent: value)),
+                      ),
                     ],
                   ),
                   _ConfigCard(
-                    icon: Icons.payments_outlined,
-                    title: 'Custos operacionais',
-                    fields: [
-                      'Combustivel por km',
-                      'Manutencao por km',
-                      'Diaria motorista',
-                      'Rastreamento',
-                      'Pedagio',
+                    icon: Icons.local_gas_station_outlined,
+                    title: 'Variaveis por viagem',
+                    children: [
+                      _ParameterField(
+                        label: 'Consumo',
+                        suffix: 'km/l',
+                        value: input.consumptionKmPerLiter,
+                        onChanged: (value) => update(
+                          input.copyWith(consumptionKmPerLiter: value),
+                        ),
+                      ),
+                      _ParameterField(
+                        label: 'Diesel',
+                        suffix: 'R\$',
+                        value: input.dieselLiterPrice,
+                        onChanged: (value) =>
+                            update(input.copyWith(dieselLiterPrice: value)),
+                      ),
+                      _ParameterField(
+                        label: 'Arla sobre diesel',
+                        suffix: '%',
+                        value: input.arlaPercent,
+                        onChanged: (value) =>
+                            update(input.copyWith(arlaPercent: value)),
+                      ),
+                      _ParameterField(
+                        label: 'Arla litro',
+                        suffix: 'R\$',
+                        value: input.arlaLiterPrice,
+                        onChanged: (value) =>
+                            update(input.copyWith(arlaLiterPrice: value)),
+                      ),
+                      _ParameterField(
+                        label: 'Manutencao',
+                        suffix: 'R\$/km',
+                        value: input.maintenanceCostPerKm,
+                        onChanged: (value) =>
+                            update(input.copyWith(maintenanceCostPerKm: value)),
+                      ),
+                      _ParameterField(
+                        label: 'Pneus',
+                        suffix: 'R\$/km',
+                        value: input.tireCostPerKm,
+                        onChanged: (value) =>
+                            update(input.copyWith(tireCostPerKm: value)),
+                      ),
+                      _ParameterField(
+                        label: 'Rastreamento',
+                        suffix: 'R\$',
+                        value: input.trackingFee,
+                        onChanged: (value) =>
+                            update(input.copyWith(trackingFee: value)),
+                      ),
                     ],
                   ),
                   _ConfigCard(
-                    icon: Icons.local_shipping_outlined,
-                    title: 'Veiculos padrao',
-                    fields: ['Fiorino', 'VUC', 'Truck', 'Carreta simples'],
-                  ),
-                  _ConfigCard(
-                    icon: Icons.inventory_outlined,
-                    title: 'Carrocerias',
-                    fields: ['Bau', 'Sider', 'Carga seca', 'Frigorifica'],
+                    icon: Icons.account_balance_wallet_outlined,
+                    title: 'Fixos rateados',
+                    children: [
+                      _ParameterField(
+                        label: 'Depreciacao mensal',
+                        suffix: 'R\$',
+                        value: input.vehicleDepreciationMonthly,
+                        onChanged: (value) => update(
+                          input.copyWith(vehicleDepreciationMonthly: value),
+                        ),
+                      ),
+                      _ParameterField(
+                        label: 'Salario motorista',
+                        suffix: 'R\$',
+                        value: input.driverSalaryMonthly,
+                        onChanged: (value) =>
+                            update(input.copyWith(driverSalaryMonthly: value)),
+                      ),
+                      _ParameterField(
+                        label: 'Encargos motorista',
+                        suffix: '%',
+                        value: input.driverBurdenPercent,
+                        onChanged: (value) =>
+                            update(input.copyWith(driverBurdenPercent: value)),
+                      ),
+                      _ParameterField(
+                        label: 'Seguro veiculo anual',
+                        suffix: 'R\$',
+                        value: input.vehicleInsuranceYearly,
+                        onChanged: (value) => update(
+                          input.copyWith(vehicleInsuranceYearly: value),
+                        ),
+                      ),
+                      _ParameterField(
+                        label: 'Administrativo mensal',
+                        suffix: 'R\$',
+                        value: input.administrativeCostsMonthly,
+                        onChanged: (value) => update(
+                          input.copyWith(administrativeCostsMonthly: value),
+                        ),
+                      ),
+                      _ParameterField(
+                        label: 'Outros fixos por viagem',
+                        suffix: 'R\$',
+                        value: input.otherFixedCostsPerTrip,
+                        onChanged: (value) => update(
+                          input.copyWith(otherFixedCostsPerTrip: value),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
               const SizedBox(height: 20),
-              const _CalculationPolicyCard(),
+              _CalculationPolicyCard(input: input),
             ]),
           ),
         ),
@@ -65,12 +191,12 @@ class _ConfigCard extends StatelessWidget {
   const _ConfigCard({
     required this.icon,
     required this.title,
-    required this.fields,
+    required this.children,
   });
 
   final IconData icon;
   final String title;
-  final List<String> fields;
+  final List<Widget> children;
 
   @override
   Widget build(BuildContext context) {
@@ -96,20 +222,7 @@ class _ConfigCard extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 14),
-              for (final field in fields) ...[
-                TextField(
-                  decoration: InputDecoration(
-                    labelText: field,
-                    suffixIcon: const Icon(Icons.edit_outlined),
-                  ),
-                ),
-                const SizedBox(height: 10),
-              ],
-              OutlinedButton.icon(
-                onPressed: () {},
-                icon: const Icon(Icons.add),
-                label: const Text('Adicionar parametro'),
-              ),
+              ...children,
             ],
           ),
         ),
@@ -118,8 +231,72 @@ class _ConfigCard extends StatelessWidget {
   }
 }
 
+class _ParameterField extends StatefulWidget {
+  const _ParameterField({
+    required this.label,
+    required this.suffix,
+    required this.value,
+    required this.onChanged,
+  });
+
+  final String label;
+  final String suffix;
+  final double value;
+  final ValueChanged<double> onChanged;
+
+  @override
+  State<_ParameterField> createState() => _ParameterFieldState();
+}
+
+class _ParameterFieldState extends State<_ParameterField> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.value.toStringAsFixed(2));
+  }
+
+  @override
+  void didUpdateWidget(covariant _ParameterField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final text = widget.value.toStringAsFixed(2);
+    if (oldWidget.value != widget.value && _controller.text != text) {
+      _controller.text = text;
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: TextField(
+        controller: _controller,
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        decoration: InputDecoration(
+          labelText: widget.label,
+          suffixText: widget.suffix,
+          suffixIcon: const Icon(Icons.edit_outlined),
+        ),
+        onChanged: (value) {
+          final parsed = double.tryParse(value.replaceAll(',', '.'));
+          if (parsed != null) widget.onChanged(parsed);
+        },
+      ),
+    );
+  }
+}
+
 class _CalculationPolicyCard extends StatelessWidget {
-  const _CalculationPolicyCard();
+  const _CalculationPolicyCard({required this.input});
+
+  final QuoteInput input;
 
   @override
   Widget build(BuildContext context) {
@@ -137,21 +314,31 @@ class _CalculationPolicyCard extends StatelessWidget {
             Wrap(
               spacing: 12,
               runSpacing: 12,
-              children: const [
-                _PolicyChip(label: 'Margem padrao', value: '22%'),
-                _PolicyChip(label: 'Margem minima', value: '12%'),
-                _PolicyChip(label: 'Fator cubagem', value: '300 kg/m3'),
-                _PolicyChip(label: 'Piso ANTT', value: 'Configuravel/manual'),
+              children: [
                 _PolicyChip(
+                  label: 'Margem atual',
+                  value: '${input.marginPercent.toStringAsFixed(1)}%',
+                ),
+                _PolicyChip(
+                  label: 'Viagens por mes',
+                  value: input.monthlyTrips.toStringAsFixed(0),
+                ),
+                _PolicyChip(label: 'Pedagio ida', value: brl(input.toll)),
+                _PolicyChip(
+                  label: 'Piso ANTT',
+                  value: input.minimumAntt > 0
+                      ? brl(input.minimumAntt)
+                      : 'manual',
+                ),
+                const _PolicyChip(
                   label: 'Consulta ANTT',
                   value: 'calculadorafrete.antt.gov.br',
                 ),
-                _PolicyChip(label: 'Vigencia', value: 'Julho/2026'),
               ],
             ),
             const SizedBox(height: 16),
             const Text(
-              'ICMS por estado, PIS, COFINS, ad valorem, seguro, margem e piso ANTT entram como parametros comerciais configuraveis. A importacao automatica da tabela ANTT oficial ainda depende de integracao com fonte homologada.',
+              'Os campos acima alimentam a cotacao atual. O piso ANTT continua manual e deve ser conferido na calculadora oficial antes de enviar proposta comercial.',
             ),
           ],
         ),

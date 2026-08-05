@@ -34,7 +34,8 @@ void main() {
     await tester.tap(find.text('Ajustes'));
     await tester.pumpAndSettle();
     expect(find.text('Configuracoes'), findsWidgets);
-    expect(find.text('Impostos e taxas'), findsOneWidget);
+    expect(find.text('Impostos e risco'), findsOneWidget);
+    expect(find.text('Variaveis por viagem'), findsOneWidget);
   });
 
   testWidgets('fluxo principal cabe em mobile', (tester) async {
@@ -75,5 +76,33 @@ void main() {
     await tester.tap(find.text('Ajustes'));
     await tester.pumpAndSettle();
     expect(find.text('Configuracoes'), findsWidgets);
+  });
+
+  testWidgets('salva cotacao e exibe no painel', (tester) async {
+    await tester.pumpWidget(const FreteCertoAppBootstrap());
+    await tester.tap(find.text('Entrar'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Cotacao'));
+    await tester.pumpAndSettle();
+    await tester.dragUntilVisible(
+      find.text('Salvar'),
+      find.byType(CustomScrollView),
+      const Offset(0, -500),
+    );
+    await tester.tap(find.text('Salvar'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Painel'));
+    await tester.pumpAndSettle();
+    expect(find.text('Painel comercial'), findsWidgets);
+    await tester.dragUntilVisible(
+      find.text('Historico de cotacoes'),
+      find.byType(CustomScrollView),
+      const Offset(0, -400),
+    );
+    expect(find.text('Historico de cotacoes'), findsOneWidget);
+    expect(find.text('Forte Expressa'), findsWidgets);
+    expect(find.text('Pronto para proposta'), findsWidgets);
   });
 }

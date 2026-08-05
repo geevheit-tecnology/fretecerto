@@ -1,6 +1,25 @@
 class FreightQuote {
   const FreightQuote({
     required this.operationalCost,
+    required this.outboundDistanceKm,
+    required this.returnDistanceKm,
+    required this.totalDistanceKm,
+    required this.fuelLiters,
+    required this.fuelCost,
+    required this.arlaLiters,
+    required this.arlaCost,
+    required this.tollCost,
+    required this.maintenanceCost,
+    required this.tireCost,
+    required this.otherVariableCosts,
+    required this.totalVariableCosts,
+    required this.vehicleDepreciationCost,
+    required this.driverSalaryCost,
+    required this.driverBurdenCost,
+    required this.vehicleInsuranceCost,
+    required this.administrativeCost,
+    required this.otherFixedCosts,
+    required this.totalFixedCosts,
     required this.icmsValue,
     required this.pisValue,
     required this.cofinsValue,
@@ -15,6 +34,25 @@ class FreightQuote {
   });
 
   final double operationalCost;
+  final double outboundDistanceKm;
+  final double returnDistanceKm;
+  final double totalDistanceKm;
+  final double fuelLiters;
+  final double fuelCost;
+  final double arlaLiters;
+  final double arlaCost;
+  final double tollCost;
+  final double maintenanceCost;
+  final double tireCost;
+  final double otherVariableCosts;
+  final double totalVariableCosts;
+  final double vehicleDepreciationCost;
+  final double driverSalaryCost;
+  final double driverBurdenCost;
+  final double vehicleInsuranceCost;
+  final double administrativeCost;
+  final double otherFixedCosts;
+  final double totalFixedCosts;
   final double icmsValue;
   final double pisValue;
   final double cofinsValue;
@@ -28,4 +66,6 @@ class FreightQuote {
   final bool isBelowAntt;
 
   double get taxValue => icmsValue + pisValue + cofinsValue;
+  double get minimumValuePerKm => commercialValue / totalDistanceKm;
+  double get costPerKm => operationalCost / totalDistanceKm;
 }
