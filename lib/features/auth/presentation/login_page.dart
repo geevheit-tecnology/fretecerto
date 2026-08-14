@@ -1,8 +1,73 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
-class LoginPage extends StatelessWidget {
+class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
+
+  @override
+  State<LoginPage> createState() => _LoginPageState();
+}
+
+class _LoginPageState extends State<LoginPage> {
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+  bool _loading = false;
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _signIn() async {
+    final email = _emailController.text.trim();
+    final password = _passwordController.text;
+    if (email.isEmpty || password.isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Informe e-mail e senha.')));
+      return;
+    }
+
+    setState(() => _loading = true);
+    try {
+      await Supabase.instance.client.auth.signInWithPassword(
+        email: email,
+        password: password,
+      );
+      if (!mounted) return;
+      context.go('/');
+    } on AuthException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Nao foi possivel entrar agora.')),
+      );
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _resetPassword() async {
+    final email = _emailController.text.trim();
+    if (email.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Informe o e-mail para recuperar senha.')),
+      );
+      return;
+    }
+    await Supabase.instance.client.auth.resetPasswordForEmail(email);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('E-mail de recuperacao enviado.')),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -19,27 +84,34 @@ class LoginPage extends StatelessWidget {
               style: Theme.of(context).textTheme.headlineSmall,
             ),
             const SizedBox(height: 20),
-            const TextField(
-              decoration: InputDecoration(
+            TextField(
+              controller: _emailController,
+              keyboardType: TextInputType.emailAddress,
+              decoration: const InputDecoration(
                 labelText: 'E-mail',
                 prefixIcon: Icon(Icons.alternate_email),
               ),
             ),
             const SizedBox(height: 12),
-            const TextField(
+            TextField(
+              controller: _passwordController,
               obscureText: true,
-              decoration: InputDecoration(
+              decoration: const InputDecoration(
                 labelText: 'Senha',
                 prefixIcon: Icon(Icons.lock_outline),
               ),
+              onSubmitted: (_) => _signIn(),
             ),
             const SizedBox(height: 20),
             FilledButton.icon(
-              onPressed: () => context.go('/'),
+              onPressed: _loading ? null : _signIn,
               icon: const Icon(Icons.login),
-              label: const Text('Entrar'),
+              label: Text(_loading ? 'Entrando...' : 'Entrar'),
             ),
-            TextButton(onPressed: () {}, child: const Text('Recuperar senha')),
+            TextButton(
+              onPressed: _loading ? null : _resetPassword,
+              child: const Text('Recuperar senha'),
+            ),
           ],
         ),
       ),

@@ -10,7 +10,7 @@ final freightCalculatorProvider = Provider<FreightCalculator>(
 );
 
 final locationDistanceServiceProvider = Provider<LocationDistanceService>(
-  (_) => const OfflineLocationDistanceService(),
+  (_) => GoogleMapsDistanceService(),
 );
 
 final quoteInputProvider = NotifierProvider<QuoteInputNotifier, QuoteInput>(

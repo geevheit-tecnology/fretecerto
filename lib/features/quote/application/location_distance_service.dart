@@ -1,5 +1,7 @@
 import 'dart:math' as math;
 
+import 'package:dio/dio.dart';
+
 class Locality {
   const Locality({
     required this.name,
@@ -20,6 +22,104 @@ abstract interface class LocationDistanceService {
   List<Locality> search(String query);
 
   double? estimateRoadDistanceKm(String originLabel, String destinationLabel);
+
+  Future<RouteDistanceResult?> resolveRoadDistance(
+    String originLabel,
+    String destinationLabel,
+  );
+}
+
+class RouteDistanceResult {
+  const RouteDistanceResult({
+    required this.distanceKm,
+    required this.source,
+    this.durationText,
+  });
+
+  final double distanceKm;
+  final RouteDistanceSource source;
+  final String? durationText;
+}
+
+enum RouteDistanceSource { googleMaps, offlineEstimate }
+
+class GoogleMapsDistanceService implements LocationDistanceService {
+  GoogleMapsDistanceService({
+    String apiKey = const String.fromEnvironment('GOOGLE_MAPS_API_KEY'),
+    Dio? dio,
+    LocationDistanceService fallback = const OfflineLocationDistanceService(),
+  }) : _apiKey = apiKey,
+       _dio = dio ?? Dio(),
+       _fallback = fallback;
+
+  final String _apiKey;
+  final Dio _dio;
+  final LocationDistanceService _fallback;
+
+  @override
+  List<Locality> search(String query) => _fallback.search(query);
+
+  @override
+  double? estimateRoadDistanceKm(String originLabel, String destinationLabel) {
+    return _fallback.estimateRoadDistanceKm(originLabel, destinationLabel);
+  }
+
+  @override
+  Future<RouteDistanceResult?> resolveRoadDistance(
+    String originLabel,
+    String destinationLabel,
+  ) async {
+    final key = _apiKey.trim();
+    if (key.isNotEmpty) {
+      try {
+        final response = await _dio.get<Map<String, dynamic>>(
+          'https://maps.googleapis.com/maps/api/distancematrix/json',
+          queryParameters: {
+            'origins': originLabel,
+            'destinations': destinationLabel,
+            'mode': 'driving',
+            'units': 'metric',
+            'language': 'pt-BR',
+            'region': 'br',
+            'key': key,
+          },
+        );
+        final parsed = _parseGoogleDistanceMatrix(response.data);
+        if (parsed != null) return parsed;
+      } on DioException {
+        // Falls back to the local estimate so the quote flow keeps working.
+      }
+    }
+
+    return _fallback.resolveRoadDistance(originLabel, destinationLabel);
+  }
+
+  static RouteDistanceResult? _parseGoogleDistanceMatrix(
+    Map<String, dynamic>? data,
+  ) {
+    if (data == null || data['status'] != 'OK') return null;
+    final rows = data['rows'];
+    if (rows is! List || rows.isEmpty) return null;
+    final firstRow = rows.first;
+    if (firstRow is! Map<String, dynamic>) return null;
+    final elements = firstRow['elements'];
+    if (elements is! List || elements.isEmpty) return null;
+    final firstElement = elements.first;
+    if (firstElement is! Map<String, dynamic>) return null;
+    if (firstElement['status'] != 'OK') return null;
+    final distance = firstElement['distance'];
+    if (distance is! Map<String, dynamic>) return null;
+    final meters = distance['value'];
+    if (meters is! num || meters <= 0) return null;
+    final duration = firstElement['duration'];
+    return RouteDistanceResult(
+      distanceKm: meters / 1000,
+      source: RouteDistanceSource.googleMaps,
+      durationText: duration is Map<String, dynamic>
+          ? duration['text'] as String?
+          : null,
+    );
+  }
 }
 
 class OfflineLocationDistanceService implements LocationDistanceService {
@@ -142,6 +242,19 @@ class OfflineLocationDistanceService implements LocationDistanceService {
     final destination = _find(destinationLabel);
     if (origin == null || destination == null) return null;
     return _haversineKm(origin, destination) * _roadFactor;
+  }
+
+  @override
+  Future<RouteDistanceResult?> resolveRoadDistance(
+    String originLabel,
+    String destinationLabel,
+  ) async {
+    final distance = estimateRoadDistanceKm(originLabel, destinationLabel);
+    if (distance == null) return null;
+    return RouteDistanceResult(
+      distanceKm: distance,
+      source: RouteDistanceSource.offlineEstimate,
+    );
   }
 
   static Locality? _find(String label) {

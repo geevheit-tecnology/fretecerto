@@ -16,4 +16,18 @@ void main() {
     expect(distance!, greaterThan(300));
     expect(distance, lessThan(500));
   });
+
+  test('servico de mapa usa fallback local quando nao existe chave', () async {
+    final service = GoogleMapsDistanceService(apiKey: '');
+
+    final result = await service.resolveRoadDistance(
+      'Santos, SP',
+      'Ribeirao Preto, SP',
+    );
+
+    expect(result, isNotNull);
+    expect(result!.source, RouteDistanceSource.offlineEstimate);
+    expect(result.distanceKm, greaterThan(300));
+    expect(result.distanceKm, lessThan(500));
+  });
 }

@@ -1,11 +1,17 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:printing/printing.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/formatters/brl.dart';
 import '../../antt/application/antt_official_consultation_service.dart';
 import '../application/location_distance_service.dart';
+import '../application/quote_export_service.dart';
 import '../application/quote_pdf_service.dart';
+import '../domain/freight_quote.dart';
 import '../domain/quote_input.dart';
 import '../domain/saved_quote.dart';
 import 'quote_controller.dart';
@@ -28,6 +34,20 @@ class QuotePage extends ConsumerWidget {
           padding: const EdgeInsets.all(24),
           sliver: SliverList(
             delegate: SliverChildListDelegate([
+              _CommercialHero(
+                quoteType: form.quoteType,
+                origin: form.origin,
+                destination: form.destination,
+                cargoType: form.cargoType,
+                totalWeightKg: input.totalWeightKg,
+                totalVolumeM3: input.totalVolumeM3,
+                invoiceValue: input.invoiceValue,
+                commercialValue: quote.commercialValue,
+                suggestedVehicle: quote.suggestedVehicle,
+                bodyType: quote.bodyType,
+                totalDistanceKm: quote.totalDistanceKm,
+              ),
+              const SizedBox(height: 16),
               Wrap(
                 spacing: 16,
                 runSpacing: 16,
@@ -126,6 +146,14 @@ class QuotePage extends ConsumerWidget {
                           max: 1600,
                           onChanged: (value) =>
                               _update(ref, input, distanceKm: value),
+                        ),
+                        _RouteMapPanel(
+                          origin: form.origin,
+                          destination: form.destination,
+                          distanceKm: input.distanceKm,
+                          service: distanceService,
+                          onDistanceResolved: (distance) =>
+                              _update(ref, input, distanceKm: distance),
                         ),
                       ],
                     ),
@@ -229,6 +257,13 @@ class QuotePage extends ConsumerWidget {
                           'Veiculo recomendado',
                           quote.suggestedVehicle,
                         ),
+                        _VehicleRecommendation(
+                          vehicle: quote.suggestedVehicle,
+                          bodyType: quote.bodyType,
+                          weightKg: input.totalWeightKg,
+                          volumeM3: input.totalVolumeM3,
+                        ),
+                        const SizedBox(height: 8),
                         _ResultRow('Carroceria', quote.bodyType),
                         _ResultRow(
                           'Custo operacional',
@@ -309,17 +344,7 @@ class QuotePage extends ConsumerWidget {
                       ),
                       FilledButton.icon(
                         onPressed: () async {
-                          final pdf = await const QuotePdfService()
-                              .buildExecutiveQuote(
-                                input: input,
-                                quote: quote,
-                                quoteType: form.quoteType,
-                                customerName: form.customerName,
-                                sellerName: form.sellerName,
-                                origin: form.origin,
-                                destination: form.destination,
-                                cargoType: form.cargoType,
-                              );
+                          final pdf = await _buildPdf(input, quote, form);
                           await Printing.layoutPdf(
                             name: 'proposta-fretecerto.pdf',
                             onLayout: (_) async => pdf,
@@ -327,6 +352,59 @@ class QuotePage extends ConsumerWidget {
                         },
                         icon: const Icon(Icons.picture_as_pdf_outlined),
                         label: const Text('Gerar PDF'),
+                      ),
+                      FilledButton.tonalIcon(
+                        onPressed: () async {
+                          final pdf = await _buildPdf(input, quote, form);
+                          await SharePlus.instance.share(
+                            ShareParams(
+                              subject:
+                                  'Proposta de frete - ${form.customerName}',
+                              text:
+                                  'Segue proposta comercial de frete ${form.origin} -> ${form.destination}.',
+                              files: [
+                                XFile.fromData(
+                                  pdf,
+                                  mimeType: 'application/pdf',
+                                  name: _fileName('proposta', 'pdf'),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                        icon: const Icon(Icons.share_outlined),
+                        label: const Text('Enviar PDF'),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: () async {
+                          final csv = const QuoteExportService().buildExcelCsv(
+                            input: input,
+                            quote: quote,
+                            quoteType: form.quoteType,
+                            customerName: form.customerName,
+                            sellerName: form.sellerName,
+                            origin: form.origin,
+                            destination: form.destination,
+                            cargoType: form.cargoType,
+                          );
+                          await SharePlus.instance.share(
+                            ShareParams(
+                              subject:
+                                  'Planilha da proposta - ${form.customerName}',
+                              text:
+                                  'Segue planilha comercial da proposta de frete.',
+                              files: [
+                                XFile.fromData(
+                                  csv,
+                                  mimeType: 'text/csv',
+                                  name: _fileName('proposta', 'csv'),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                        icon: const Icon(Icons.table_chart_outlined),
+                        label: const Text('Enviar Excel'),
                       ),
                       OutlinedButton.icon(
                         onPressed: () {
@@ -366,6 +444,28 @@ class QuotePage extends ConsumerWidget {
         ),
       ],
     );
+  }
+
+  static Future<Uint8List> _buildPdf(
+    QuoteInput input,
+    FreightQuote quote,
+    QuoteFormState form,
+  ) {
+    return const QuotePdfService().buildExecutiveQuote(
+      input: input,
+      quote: quote,
+      quoteType: form.quoteType,
+      customerName: form.customerName,
+      sellerName: form.sellerName,
+      origin: form.origin,
+      destination: form.destination,
+      cargoType: form.cargoType,
+    );
+  }
+
+  static String _fileName(String prefix, String extension) {
+    final stamp = DateTime.now().toIso8601String().substring(0, 10);
+    return '$prefix-fretecerto-$stamp.$extension';
   }
 
   static void _update(
@@ -418,6 +518,422 @@ class QuotePage extends ConsumerWidget {
             monthlyTrips: monthlyTrips ?? input.monthlyTrips,
           ),
         );
+  }
+}
+
+class _CommercialHero extends StatelessWidget {
+  const _CommercialHero({
+    required this.quoteType,
+    required this.origin,
+    required this.destination,
+    required this.cargoType,
+    required this.totalWeightKg,
+    required this.totalVolumeM3,
+    required this.invoiceValue,
+    required this.commercialValue,
+    required this.suggestedVehicle,
+    required this.bodyType,
+    required this.totalDistanceKm,
+  });
+
+  final String quoteType;
+  final String origin;
+  final String destination;
+  final String cargoType;
+  final double totalWeightKg;
+  final double totalVolumeM3;
+  final double invoiceValue;
+  final double commercialValue;
+  final String suggestedVehicle;
+  final String bodyType;
+  final double totalDistanceKm;
+
+  @override
+  Widget build(BuildContext context) {
+    final compact = MediaQuery.sizeOf(context).width < 760;
+    final routeSummary = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          quoteType,
+          style: const TextStyle(
+            color: Color(0xFF80CBC4),
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          '$origin -> $destination',
+          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+            color: Colors.white,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        const SizedBox(height: 10),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            _HeroChip(Icons.inventory_2_outlined, cargoType),
+            _HeroChip(
+              Icons.scale_outlined,
+              '${totalWeightKg.toStringAsFixed(0)} kg',
+            ),
+            _HeroChip(
+              Icons.view_in_ar_outlined,
+              '${totalVolumeM3.toStringAsFixed(0)} m3',
+            ),
+            _HeroChip(Icons.receipt_long_outlined, brl(invoiceValue)),
+          ],
+        ),
+      ],
+    );
+    final valueSummary = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Valor comercial',
+          style: TextStyle(color: Color(0xFFB2DFDB)),
+        ),
+        Text(
+          brl(commercialValue),
+          style: Theme.of(context).textTheme.displaySmall?.copyWith(
+            color: Colors.white,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          '$suggestedVehicle $bodyType | ${totalDistanceKm.toStringAsFixed(0)} km total',
+          style: const TextStyle(color: Colors.white),
+        ),
+      ],
+    );
+    return Container(
+      padding: const EdgeInsets.all(22),
+      decoration: BoxDecoration(
+        color: const Color(0xFF102A2A),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: compact
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                routeSummary,
+                const SizedBox(height: 18),
+                valueSummary,
+              ],
+            )
+          : Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(flex: 2, child: routeSummary),
+                const SizedBox(width: 24),
+                Expanded(child: valueSummary),
+              ],
+            ),
+    );
+  }
+}
+
+class _HeroChip extends StatelessWidget {
+  const _HeroChip(this.icon, this.label);
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Chip(
+      avatar: Icon(icon, size: 18, color: Colors.white),
+      label: Text(label),
+      backgroundColor: Colors.white.withValues(alpha: 0.12),
+      side: BorderSide(color: Colors.white.withValues(alpha: 0.22)),
+      labelStyle: const TextStyle(color: Colors.white),
+    );
+  }
+}
+
+class _RouteMapPanel extends StatelessWidget {
+  const _RouteMapPanel({
+    required this.origin,
+    required this.destination,
+    required this.distanceKm,
+    required this.service,
+    required this.onDistanceResolved,
+  });
+
+  final String origin;
+  final String destination;
+  final double distanceKm;
+  final LocationDistanceService service;
+  final ValueChanged<double> onDistanceResolved;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFEAF4F2),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFC8DEDA)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.route_outlined),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Mapa da rota',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+              ),
+              Text('${distanceKm.toStringAsFixed(0)} km'),
+            ],
+          ),
+          const SizedBox(height: 14),
+          SizedBox(
+            height: 108,
+            child: CustomPaint(
+              painter: _RoutePainter(),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: _RouteStop(label: origin, icon: Icons.trip_origin),
+                  ),
+                  Expanded(
+                    child: Align(
+                      alignment: Alignment.topCenter,
+                      child: Chip(
+                        avatar: const Icon(
+                          Icons.local_shipping_outlined,
+                          size: 18,
+                        ),
+                        label: Text('${distanceKm.toStringAsFixed(0)} km'),
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: _RouteStop(
+                      label: destination,
+                      icon: Icons.flag_outlined,
+                      alignEnd: true,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              FilledButton.icon(
+                onPressed: () async {
+                  final resolved = await service.resolveRoadDistance(
+                    origin,
+                    destination,
+                  );
+                  if (resolved == null) {
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                          'Nao encontrei essa rota na base local. Selecione origem e destino da lista ou informe a distancia manualmente.',
+                        ),
+                      ),
+                    );
+                    return;
+                  }
+                  onDistanceResolved(resolved.distanceKm);
+                  if (!context.mounted) return;
+                  final source = switch (resolved.source) {
+                    RouteDistanceSource.googleMaps => 'Google Maps',
+                    RouteDistanceSource.offlineEstimate => 'estimativa local',
+                  };
+                  final duration = resolved.durationText == null
+                      ? ''
+                      : ' Tempo: ${resolved.durationText}.';
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        'Distancia aplicada: ${resolved.distanceKm.toStringAsFixed(0)} km via $source.$duration',
+                      ),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.auto_fix_high_outlined),
+                label: const Text('Calcular e aplicar'),
+              ),
+              OutlinedButton.icon(
+                onPressed: () async {
+                  final uri = Uri.https('www.google.com', '/maps/dir/', {
+                    'api': '1',
+                    'origin': origin,
+                    'destination': destination,
+                  });
+                  await launchUrl(uri, mode: LaunchMode.externalApplication);
+                },
+                icon: const Icon(Icons.open_in_new),
+                label: const Text('Conferir no mapa'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RouteStop extends StatelessWidget {
+  const _RouteStop({
+    required this.label,
+    required this.icon,
+    this.alignEnd = false,
+  });
+
+  final String label;
+  final IconData icon;
+  final bool alignEnd;
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: alignEnd ? Alignment.bottomRight : Alignment.bottomLeft,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: alignEnd
+            ? CrossAxisAlignment.end
+            : CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: Theme.of(context).colorScheme.primary),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            textAlign: alignEnd ? TextAlign.end : TextAlign.start,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RoutePainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = const Color(0xFF0E6F68)
+      ..strokeWidth = 4
+      ..style = PaintingStyle.stroke;
+    final path = Path()
+      ..moveTo(18, size.height - 34)
+      ..cubicTo(
+        size.width * .32,
+        10,
+        size.width * .66,
+        10,
+        size.width - 18,
+        size.height - 34,
+      );
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+class _VehicleRecommendation extends StatelessWidget {
+  const _VehicleRecommendation({
+    required this.vehicle,
+    required this.bodyType,
+    required this.weightKg,
+    required this.volumeM3,
+  });
+
+  final String vehicle;
+  final String bodyType;
+  final double weightKg;
+  final double volumeM3;
+
+  @override
+  Widget build(BuildContext context) {
+    final axleCount = switch (vehicle) {
+      'Fiorino' || 'Van' || 'VUC' => 2,
+      'Toco' => 2,
+      'Truck' => 3,
+      _ => 5,
+    };
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF6F8F8),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFE0E6E8)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            height: 72,
+            child: CustomPaint(
+              painter: _TruckPainter(axleCount: axleCount),
+              child: const SizedBox.expand(),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              Chip(label: Text('$axleCount eixos')),
+              Chip(label: Text(bodyType)),
+              Chip(label: Text('${weightKg.toStringAsFixed(0)} kg')),
+              Chip(label: Text('${volumeM3.toStringAsFixed(0)} m3')),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TruckPainter extends CustomPainter {
+  const _TruckPainter({required this.axleCount});
+
+  final int axleCount;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final body = Paint()..color = const Color(0xFF0E6F68);
+    final cab = Paint()..color = const Color(0xFF17444A);
+    final wheel = Paint()..color = const Color(0xFF111827);
+    final bodyRect = RRect.fromRectAndRadius(
+      Rect.fromLTWH(8, 16, size.width * .64, 34),
+      const Radius.circular(6),
+    );
+    final cabRect = RRect.fromRectAndRadius(
+      Rect.fromLTWH(size.width * .68, 24, size.width * .22, 26),
+      const Radius.circular(6),
+    );
+    canvas.drawRRect(bodyRect, body);
+    canvas.drawRRect(cabRect, cab);
+    for (var i = 0; i < axleCount; i++) {
+      final x = 24 + (i * ((size.width - 64) / axleCount));
+      canvas.drawCircle(Offset(x, 56), 8, wheel);
+      canvas.drawCircle(Offset(x, 56), 3, Paint()..color = Colors.white);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _TruckPainter oldDelegate) {
+    return oldDelegate.axleCount != axleCount;
   }
 }
 

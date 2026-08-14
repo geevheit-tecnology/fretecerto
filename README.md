@@ -1,16 +1,22 @@
-# fretecerto
+# FreteCerto
 
-A new Flutter project.
+Aplicativo comercial para cotacao de frete, proposta em PDF, custos operacionais,
+rota, carga e sugestao de veiculo.
 
-## Getting Started
+## Distancia real de rota
 
-This project is a starting point for a Flutter application.
+O app esta preparado para consultar distancia rodoviaria pelo Google Maps
+Distance Matrix API quando uma chave for informada no build:
 
-A few resources to get you started if this is your first Flutter project:
+```bash
+flutter run --dart-define=GOOGLE_MAPS_API_KEY=SUA_CHAVE
+flutter build apk --release --dart-define=GOOGLE_MAPS_API_KEY=SUA_CHAVE
+```
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+Sem a chave, a cotacao continua funcionando com a estimativa local por cidades
+cadastradas. Para producao, restrinja a chave no Google Cloud, habilite
+billing e habilite a Distance Matrix API.
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+O botao `Calcular e aplicar` tenta a API real primeiro e aplica o resultado
+direto na cotacao. O botao `Conferir no mapa` abre o Google Maps apenas para
+visualizacao da rota.
