@@ -32,7 +32,8 @@ void main() {
     await tester.pumpWidget(const FreteCertoAppBootstrap());
 
     expect(find.text('FreteCerto'), findsOneWidget);
-    expect(find.text('Acesso comercial'), findsOneWidget);
+    expect(find.text('Acesso seguro'), findsOneWidget);
+    expect(find.text('Entrar no painel'), findsOneWidget);
   });
 
   testWidgets('navega para usuarios e configuracoes', (tester) async {
