@@ -2,12 +2,15 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:printing/printing.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/formatters/brl.dart';
 import '../../antt/application/antt_official_consultation_service.dart';
+import '../../customers/application/customer_repository.dart';
+import '../../customers/domain/customer.dart';
 import '../application/location_distance_service.dart';
 import '../application/quote_export_service.dart';
 import '../application/quote_pdf_service.dart';
@@ -17,11 +20,18 @@ import '../domain/saved_quote.dart';
 import 'quote_controller.dart';
 import 'quote_history_controller.dart';
 
-class QuotePage extends ConsumerWidget {
+class QuotePage extends ConsumerStatefulWidget {
   const QuotePage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<QuotePage> createState() => _QuotePageState();
+}
+
+class _QuotePageState extends ConsumerState<QuotePage> {
+  bool _savingQuote = false;
+
+  @override
+  Widget build(BuildContext context) {
     final input = ref.watch(quoteInputProvider);
     final form = ref.watch(quoteFormProvider);
     final quote = ref.watch(freightQuoteProvider);
@@ -48,46 +58,54 @@ class QuotePage extends ConsumerWidget {
                 totalDistanceKm: quote.totalDistanceKm,
               ),
               const SizedBox(height: 16),
+              _ModeGuide(quoteType: form.quoteType),
+              const SizedBox(height: 12),
+              _QuickActionBar(
+                onAntt: () => _openAntt(context),
+                onEmail: () => _sendEmail(context, input, quote, form),
+                onWhatsApp: () => _sendWhatsApp(context, input, quote, form),
+              ),
+              const SizedBox(height: 16),
               Wrap(
                 spacing: 16,
                 runSpacing: 16,
                 children: [
                   _SegmentCard(
-                    title: 'Tipo e cliente',
+                    title: form.quoteType == 'Orcamento'
+                        ? 'Orcamento rapido'
+                        : 'Cliente e proposta',
                     child: Column(
                       children: [
-                        DropdownButtonFormField<String>(
-                          initialValue: form.quoteType,
-                          decoration: const InputDecoration(
-                            labelText: 'Tipo',
-                            prefixIcon: Icon(Icons.assignment_outlined),
-                          ),
-                          items: const [
-                            DropdownMenuItem(
+                        SegmentedButton<String>(
+                          segments: const [
+                            ButtonSegment(
                               value: 'Orcamento',
-                              child: Text('Orcamento'),
+                              icon: Icon(Icons.flash_on_outlined),
+                              label: Text('Orcamento'),
                             ),
-                            DropdownMenuItem(
+                            ButtonSegment(
                               value: 'Proposta',
-                              child: Text('Proposta'),
+                              icon: Icon(Icons.description_outlined),
+                              label: Text('Proposta'),
                             ),
                           ],
-                          onChanged: (value) {
-                            if (value == null) return;
+                          selected: {form.quoteType},
+                          onSelectionChanged: (values) {
                             ref
                                 .read(quoteFormProvider.notifier)
-                                .update(form.copyWith(quoteType: value));
+                                .update(form.copyWith(quoteType: values.first));
                           },
                         ),
                         const SizedBox(height: 10),
-                        _EditableField(
-                          label: 'Solicitante',
+                        _CustomerPicker(
                           value: form.customerName,
                           onChanged: (value) {
                             ref
                                 .read(quoteFormProvider.notifier)
                                 .update(form.copyWith(customerName: value));
                           },
+                          onCreate: () =>
+                              context.go('/clientes?returnTo=/cotacao'),
                         ),
                         _EditableField(
                           label: 'Vendedor',
@@ -138,12 +156,10 @@ class QuotePage extends ConsumerWidget {
                             }
                           },
                         ),
-                        _NumberSlider(
+                        _NumberField(
                           label: 'Distancia rodoviaria',
                           suffix: 'km',
                           value: input.distanceKm,
-                          min: 50,
-                          max: 1600,
                           onChanged: (value) =>
                               _update(ref, input, distanceKm: value),
                         ),
@@ -162,21 +178,17 @@ class QuotePage extends ConsumerWidget {
                     title: 'Carga',
                     child: Column(
                       children: [
-                        _NumberSlider(
+                        _NumberField(
                           label: 'Peso total',
                           suffix: 'kg',
                           value: input.totalWeightKg,
-                          min: 100,
-                          max: 28000,
                           onChanged: (value) =>
                               _update(ref, input, totalWeightKg: value),
                         ),
-                        _NumberSlider(
+                        _NumberField(
                           label: 'Cubagem',
                           suffix: 'm3',
                           value: input.totalVolumeM3,
-                          min: 1,
-                          max: 90,
                           onChanged: (value) =>
                               _update(ref, input, totalVolumeM3: value),
                         ),
@@ -211,52 +223,63 @@ class QuotePage extends ConsumerWidget {
                     ),
                   ),
                   _SegmentCard(
-                    title: 'Custos da viagem',
-                    child: Column(
-                      children: [
-                        _MoneyField(
-                          label: 'Pedagio ida',
-                          value: input.toll,
-                          onChanged: (value) =>
-                              _update(ref, input, toll: value),
-                        ),
-                        _MoneyField(
-                          label: 'Carga',
-                          value: input.loadingFee,
-                          onChanged: (value) =>
-                              _update(ref, input, loadingFee: value),
-                        ),
-                        _MoneyField(
-                          label: 'Descarga',
-                          value: input.unloadingFee,
-                          onChanged: (value) =>
-                              _update(ref, input, unloadingFee: value),
-                        ),
-                        _MoneyField(
-                          label: 'Outros variaveis',
-                          value: input.otherVariableCosts,
-                          onChanged: (value) =>
-                              _update(ref, input, otherVariableCosts: value),
-                        ),
-                        _NumberField(
-                          label: 'Viagens por mes',
-                          suffix: 'viagens',
-                          value: input.monthlyTrips,
-                          onChanged: (value) =>
-                              _update(ref, input, monthlyTrips: value),
-                        ),
-                      ],
+                    title: 'Conferencia ANTT',
+                    child: _AnttComplianceForm(
+                      form: form,
+                      input: input,
+                      quote: quote,
+                      onChanged: (next) {
+                        ref.read(quoteFormProvider.notifier).update(next);
+                      },
+                      onMinimumChanged: (value) =>
+                          _update(ref, input, minimumAntt: value),
                     ),
                   ),
+                  if (form.quoteType != 'Orcamento')
+                    _SegmentCard(
+                      title: 'Custos da viagem',
+                      child: Column(
+                        children: [
+                          _MoneyField(
+                            label: 'Pedagio ida',
+                            value: input.toll,
+                            onChanged: (value) =>
+                                _update(ref, input, toll: value),
+                          ),
+                          _MoneyField(
+                            label: 'Carga',
+                            value: input.loadingFee,
+                            onChanged: (value) =>
+                                _update(ref, input, loadingFee: value),
+                          ),
+                          _MoneyField(
+                            label: 'Descarga',
+                            value: input.unloadingFee,
+                            onChanged: (value) =>
+                                _update(ref, input, unloadingFee: value),
+                          ),
+                          _MoneyField(
+                            label: 'Outros variaveis',
+                            value: input.otherVariableCosts,
+                            onChanged: (value) =>
+                                _update(ref, input, otherVariableCosts: value),
+                          ),
+                          _NumberField(
+                            label: 'Viagens por mes',
+                            suffix: 'viagens',
+                            value: input.monthlyTrips,
+                            onChanged: (value) =>
+                                _update(ref, input, monthlyTrips: value),
+                          ),
+                        ],
+                      ),
+                    ),
                   _SegmentCard(
                     title: 'Resultado comercial',
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _ResultRow(
-                          'Veiculo recomendado',
-                          quote.suggestedVehicle,
-                        ),
+                        _ResultRow('Porte operacional', quote.suggestedVehicle),
                         _VehicleRecommendation(
                           vehicle: quote.suggestedVehicle,
                           bodyType: quote.bodyType,
@@ -302,20 +325,7 @@ class QuotePage extends ConsumerWidget {
                         _AnttBadge(isBelowAntt: quote.isBelowAntt),
                         const SizedBox(height: 10),
                         OutlinedButton.icon(
-                          onPressed: () async {
-                            final opened =
-                                await const AnttOfficialConsultationService()
-                                    .openOfficialCalculator();
-                            if (!opened && context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text(
-                                    'Nao foi possivel abrir a calculadora oficial da ANTT.',
-                                  ),
-                                ),
-                              );
-                            }
-                          },
+                          onPressed: () => _openAntt(context),
                           icon: const Icon(Icons.open_in_new),
                           label: const Text('Consultar ANTT oficial'),
                         ),
@@ -342,6 +352,20 @@ class QuotePage extends ConsumerWidget {
                           'Calculo comercial estimativo. Parametros fiscais, custos, margens e piso ANTT devem ser validados pela administracao.',
                         ),
                       ),
+                      FilledButton.tonalIcon(
+                        onPressed: () async {
+                          await _sendEmail(context, input, quote, form);
+                        },
+                        icon: const Icon(Icons.mail_outline),
+                        label: const Text('Enviar por email'),
+                      ),
+                      FilledButton.tonalIcon(
+                        onPressed: () async {
+                          await _sendWhatsApp(context, input, quote, form);
+                        },
+                        icon: const Icon(Icons.chat_outlined),
+                        label: const Text('Enviar WhatsApp'),
+                      ),
                       FilledButton.icon(
                         onPressed: () async {
                           final pdf = await _buildPdf(input, quote, form);
@@ -351,89 +375,115 @@ class QuotePage extends ConsumerWidget {
                           );
                         },
                         icon: const Icon(Icons.picture_as_pdf_outlined),
-                        label: const Text('Gerar PDF'),
+                        label: Text(
+                          form.quoteType == 'Orcamento'
+                              ? 'Gerar orcamento'
+                              : 'Gerar proposta',
+                        ),
                       ),
-                      FilledButton.tonalIcon(
-                        onPressed: () async {
-                          final pdf = await _buildPdf(input, quote, form);
-                          await SharePlus.instance.share(
-                            ShareParams(
-                              subject:
-                                  'Proposta de frete - ${form.customerName}',
-                              text:
-                                  'Segue proposta comercial de frete ${form.origin} -> ${form.destination}.',
-                              files: [
-                                XFile.fromData(
-                                  pdf,
-                                  mimeType: 'application/pdf',
-                                  name: _fileName('proposta', 'pdf'),
-                                ),
-                              ],
-                            ),
-                          );
-                        },
-                        icon: const Icon(Icons.share_outlined),
-                        label: const Text('Enviar PDF'),
-                      ),
-                      OutlinedButton.icon(
-                        onPressed: () async {
-                          final csv = const QuoteExportService().buildExcelCsv(
-                            input: input,
-                            quote: quote,
-                            quoteType: form.quoteType,
-                            customerName: form.customerName,
-                            sellerName: form.sellerName,
-                            origin: form.origin,
-                            destination: form.destination,
-                            cargoType: form.cargoType,
-                          );
-                          await SharePlus.instance.share(
-                            ShareParams(
-                              subject:
-                                  'Planilha da proposta - ${form.customerName}',
-                              text:
-                                  'Segue planilha comercial da proposta de frete.',
-                              files: [
-                                XFile.fromData(
-                                  csv,
-                                  mimeType: 'text/csv',
-                                  name: _fileName('proposta', 'csv'),
-                                ),
-                              ],
-                            ),
-                          );
-                        },
-                        icon: const Icon(Icons.table_chart_outlined),
-                        label: const Text('Enviar Excel'),
-                      ),
-                      OutlinedButton.icon(
-                        onPressed: () {
-                          final createdAt = DateTime.now();
-                          ref
-                              .read(quoteHistoryProvider.notifier)
-                              .save(
-                                SavedQuote(
-                                  id: createdAt.microsecondsSinceEpoch
-                                      .toString(),
-                                  createdAt: createdAt,
+                      if (form.quoteType != 'Orcamento') ...[
+                        FilledButton.tonalIcon(
+                          onPressed: () async {
+                            final pdf = await _buildPdf(input, quote, form);
+                            await SharePlus.instance.share(
+                              ShareParams(
+                                subject:
+                                    'Proposta de frete - ${form.customerName}',
+                                text:
+                                    'Segue proposta comercial de frete ${form.origin} -> ${form.destination}.',
+                                files: [
+                                  XFile.fromData(
+                                    pdf,
+                                    mimeType: 'application/pdf',
+                                    name: _fileName('proposta', 'pdf'),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                          icon: const Icon(Icons.share_outlined),
+                          label: const Text('Enviar PDF'),
+                        ),
+                        OutlinedButton.icon(
+                          onPressed: () async {
+                            final csv = const QuoteExportService()
+                                .buildExcelCsv(
+                                  input: input,
+                                  quote: quote,
+                                  quoteType: form.quoteType,
                                   customerName: form.customerName,
+                                  sellerName: form.sellerName,
                                   origin: form.origin,
                                   destination: form.destination,
                                   cargoType: form.cargoType,
-                                  suggestedVehicle: quote.suggestedVehicle,
-                                  commercialValue: quote.commercialValue,
-                                  minimumAnttValue: quote.minimumAnttValue,
-                                  isBelowAntt: quote.isBelowAntt,
-                                ),
-                              );
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Cotacao salva no historico.'),
-                            ),
-                          );
-                        },
+                                );
+                            await SharePlus.instance.share(
+                              ShareParams(
+                                subject:
+                                    'Planilha da proposta - ${form.customerName}',
+                                text:
+                                    'Segue planilha comercial da proposta de frete.',
+                                files: [
+                                  XFile.fromData(
+                                    csv,
+                                    mimeType: 'text/csv',
+                                    name: _fileName('proposta', 'csv'),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                          icon: const Icon(Icons.table_chart_outlined),
+                          label: const Text('Enviar Excel'),
+                        ),
+                        FilledButton.icon(
+                          onPressed: () async {
+                            final pdf = await _buildContract(
+                              input,
+                              quote,
+                              form,
+                            );
+                            await Printing.layoutPdf(
+                              name: 'contrato-fretecerto.pdf',
+                              onLayout: (_) async => pdf,
+                            );
+                          },
+                          icon: const Icon(Icons.description_outlined),
+                          label: const Text('Gerar contrato'),
+                        ),
+                        OutlinedButton.icon(
+                          onPressed: () async {
+                            final pdf = await _buildContract(
+                              input,
+                              quote,
+                              form,
+                            );
+                            await SharePlus.instance.share(
+                              ShareParams(
+                                subject:
+                                    'Contrato de frete - ${form.customerName}',
+                                text:
+                                    'Segue minuta de contrato de transporte referente a cotacao ${form.origin} -> ${form.destination}.',
+                                files: [
+                                  XFile.fromData(
+                                    pdf,
+                                    mimeType: 'application/pdf',
+                                    name: _fileName('contrato', 'pdf'),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                          icon: const Icon(Icons.ios_share_outlined),
+                          label: const Text('Enviar contrato'),
+                        ),
+                      ],
+                      OutlinedButton.icon(
+                        onPressed: _savingQuote
+                            ? null
+                            : () => _saveQuote(context, input, quote, form),
                         icon: const Icon(Icons.save_outlined),
-                        label: const Text('Salvar'),
+                        label: Text(_savingQuote ? 'Salvando...' : 'Salvar'),
                       ),
                     ],
                   ),
@@ -443,6 +493,55 @@ class QuotePage extends ConsumerWidget {
           ),
         ),
       ],
+    );
+  }
+
+  Future<void> _saveQuote(
+    BuildContext context,
+    QuoteInput input,
+    FreightQuote quote,
+    QuoteFormState form,
+  ) async {
+    if (_savingQuote) return;
+    setState(() => _savingQuote = true);
+    final createdAt = DateTime.now();
+    final savedQuote = SavedQuote(
+      id: createdAt.microsecondsSinceEpoch.toString(),
+      createdAt: createdAt,
+      customerName: form.customerName,
+      sellerName: form.sellerName,
+      origin: form.origin,
+      destination: form.destination,
+      cargoType: form.cargoType,
+      quoteType: form.quoteType,
+      totalWeightKg: input.totalWeightKg,
+      totalVolumeM3: input.totalVolumeM3,
+      invoiceValue: input.invoiceValue,
+      distanceKm: input.distanceKm,
+      totalDistanceKm: quote.totalDistanceKm,
+      suggestedVehicle: quote.suggestedVehicle,
+      bodyType: quote.bodyType,
+      commercialValue: quote.commercialValue,
+      operationalCost: quote.operationalCost,
+      minimumAnttValue: quote.minimumAnttValue,
+      isBelowAntt: quote.isBelowAntt,
+      anttCargoType: form.anttCargoType,
+      anttAxles: form.anttAxles,
+      isDieselVehicle: form.isDieselVehicle,
+      isNationalTrip: form.isNationalTrip,
+      isFullTruckload: form.isFullTruckload,
+      isVehicleComposition: form.isVehicleComposition,
+      isHighPerformance: form.isHighPerformance,
+      hasEmptyReturn: form.hasEmptyReturn,
+    );
+    try {
+      await ref.read(quoteHistoryProvider.notifier).save(savedQuote);
+    } finally {
+      if (mounted) setState(() => _savingQuote = false);
+    }
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Cotacao salva no historico.')),
     );
   }
 
@@ -460,7 +559,118 @@ class QuotePage extends ConsumerWidget {
       origin: form.origin,
       destination: form.destination,
       cargoType: form.cargoType,
+      anttCargoType: form.anttCargoType,
+      anttAxles: form.anttAxles,
+      isDieselVehicle: form.isDieselVehicle,
+      isNationalTrip: form.isNationalTrip,
+      isFullTruckload: form.isFullTruckload,
+      isVehicleComposition: form.isVehicleComposition,
+      isHighPerformance: form.isHighPerformance,
+      hasEmptyReturn: form.hasEmptyReturn,
     );
+  }
+
+  static Future<Uint8List> _buildContract(
+    QuoteInput input,
+    FreightQuote quote,
+    QuoteFormState form,
+  ) {
+    return const QuotePdfService().buildFreightContract(
+      input: input,
+      quote: quote,
+      quoteType: form.quoteType,
+      customerName: form.customerName,
+      sellerName: form.sellerName,
+      origin: form.origin,
+      destination: form.destination,
+      cargoType: form.cargoType,
+      anttCargoType: form.anttCargoType,
+      anttAxles: form.anttAxles,
+      isDieselVehicle: form.isDieselVehicle,
+      isNationalTrip: form.isNationalTrip,
+      isFullTruckload: form.isFullTruckload,
+      isVehicleComposition: form.isVehicleComposition,
+      isHighPerformance: form.isHighPerformance,
+      hasEmptyReturn: form.hasEmptyReturn,
+    );
+  }
+
+  static Future<void> _openAntt(BuildContext context) async {
+    final opened = await const AnttOfficialConsultationService()
+        .openOfficialCalculator();
+    if (!opened && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Nao foi possivel abrir a calculadora oficial da ANTT.',
+          ),
+        ),
+      );
+    }
+  }
+
+  static Future<void> _sendEmail(
+    BuildContext context,
+    QuoteInput input,
+    FreightQuote quote,
+    QuoteFormState form,
+  ) async {
+    final uri = Uri(
+      scheme: 'mailto',
+      queryParameters: {
+        'subject': '${form.quoteType} de frete - ${form.customerName}',
+        'body': _commercialMessage(input, quote, form),
+      },
+    );
+    final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!opened && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Nao foi possivel abrir o email.')),
+      );
+    }
+  }
+
+  static Future<void> _sendWhatsApp(
+    BuildContext context,
+    QuoteInput input,
+    FreightQuote quote,
+    QuoteFormState form,
+  ) async {
+    final uri = Uri.https('wa.me', '/', {
+      'text': _commercialMessage(input, quote, form),
+    });
+    final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!opened && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Nao foi possivel abrir o WhatsApp.')),
+      );
+    }
+  }
+
+  static String _commercialMessage(
+    QuoteInput input,
+    FreightQuote quote,
+    QuoteFormState form,
+  ) {
+    return '''
+${form.quoteType} de frete - FreteCerto
+
+Cliente: ${form.customerName}
+Rota: ${form.origin} -> ${form.destination}
+Carga: ${form.cargoType}
+Peso: ${input.totalWeightKg.toStringAsFixed(0)} kg
+Cubagem: ${input.totalVolumeM3.toStringAsFixed(1)} m3
+Porte operacional: ${quote.suggestedVehicle}
+Carroceria: ${quote.bodyType}
+Tipo ANTT: ${form.anttCargoType}
+Eixos ANTT: ${form.anttAxles}
+Distancia total estimada: ${quote.totalDistanceKm.toStringAsFixed(0)} km
+Piso ANTT informado: ${brl(quote.minimumAnttValue)}
+Valor comercial: ${brl(quote.commercialValue)}
+Status: ${quote.isBelowAntt ? 'abaixo do piso informado' : 'acima do piso informado'}
+
+Validade: 7 dias corridos, sujeito a confirmacao cadastral, fiscal e operacional.
+''';
   }
 
   static String _fileName(String prefix, String extension) {
@@ -604,7 +814,7 @@ class _CommercialHero extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         Text(
-          '$suggestedVehicle $bodyType | ${totalDistanceKm.toStringAsFixed(0)} km total',
+          '$suggestedVehicle | ${totalDistanceKm.toStringAsFixed(0)} km total',
           style: const TextStyle(color: Colors.white),
         ),
       ],
@@ -632,6 +842,102 @@ class _CommercialHero extends StatelessWidget {
                 Expanded(child: valueSummary),
               ],
             ),
+    );
+  }
+}
+
+class _ModeGuide extends StatelessWidget {
+  const _ModeGuide({required this.quoteType});
+
+  final String quoteType;
+
+  @override
+  Widget build(BuildContext context) {
+    final isBudget = quoteType == 'Orcamento';
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isBudget ? const Color(0xFFFFF7E8) : const Color(0xFFEAF4F2),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: isBudget ? const Color(0xFFF2D09A) : const Color(0xFFC8DEDA),
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            isBudget ? Icons.flash_on_outlined : Icons.verified_outlined,
+            color: isBudget ? const Color(0xFF9A5B00) : const Color(0xFF0E6F68),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  isBudget
+                      ? 'Formulario rapido sem compromisso'
+                      : 'Cotacao comercial com proposta e contrato',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  isBudget
+                      ? 'Use origem, destino, carga, peso, cubagem e valor da mercadoria para responder rapido ao cliente. Os custos finos continuam no motor de calculo.'
+                      : 'Use os campos completos para fechar proposta, gerar PDF, planilha, mensagem comercial e minuta de contrato.',
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _QuickActionBar extends StatelessWidget {
+  const _QuickActionBar({
+    required this.onAntt,
+    required this.onEmail,
+    required this.onWhatsApp,
+  });
+
+  final VoidCallback onAntt;
+  final VoidCallback onEmail;
+  final VoidCallback onWhatsApp;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            OutlinedButton.icon(
+              onPressed: onAntt,
+              icon: const Icon(Icons.open_in_new),
+              label: const Text('Consultar ANTT oficial'),
+            ),
+            FilledButton.tonalIcon(
+              onPressed: onEmail,
+              icon: const Icon(Icons.mail_outline),
+              label: const Text('Email rapido'),
+            ),
+            FilledButton.tonalIcon(
+              onPressed: onWhatsApp,
+              icon: const Icon(Icons.chat_outlined),
+              label: const Text('WhatsApp rapido'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -863,23 +1169,45 @@ class _VehicleRecommendation extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final axleCount = switch (vehicle) {
-      'Fiorino' || 'Van' || 'VUC' => 2,
-      'Toco' => 2,
-      'Truck' => 3,
-      _ => 5,
-    };
+    final axleCount = _axleCountFor(vehicle);
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: const Color(0xFFF6F8F8),
+        color: const Color(0xFFF3F7F6),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFFE0E6E8)),
+        border: Border.all(color: const Color(0xFFCCE3DF)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE0F2EF),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(
+                  Icons.rule_outlined,
+                  color: Color(0xFF0E6F68),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Porte calculado por peso e cubagem. A carroceria deve ser confirmada conforme carga, contrato e operacao.',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: const Color(0xFF315654),
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
           SizedBox(
             height: 72,
             child: CustomPaint(
@@ -892,14 +1220,223 @@ class _VehicleRecommendation extends StatelessWidget {
             spacing: 8,
             runSpacing: 8,
             children: [
+              Chip(label: Text(vehicle)),
               Chip(label: Text('$axleCount eixos')),
-              Chip(label: Text(bodyType)),
+              Chip(label: Text('Carroceria: $bodyType')),
               Chip(label: Text('${weightKg.toStringAsFixed(0)} kg')),
               Chip(label: Text('${volumeM3.toStringAsFixed(0)} m3')),
             ],
           ),
         ],
       ),
+    );
+  }
+
+  static int _axleCountFor(String vehicle) {
+    if (vehicle.contains('3 eixos')) return 3;
+    if (vehicle.contains('5+ eixos')) return 5;
+    return 2;
+  }
+}
+
+class _AnttComplianceForm extends StatelessWidget {
+  const _AnttComplianceForm({
+    required this.form,
+    required this.input,
+    required this.quote,
+    required this.onChanged,
+    required this.onMinimumChanged,
+  });
+
+  final QuoteFormState form;
+  final QuoteInput input;
+  final FreightQuote quote;
+  final ValueChanged<QuoteFormState> onChanged;
+  final ValueChanged<double> onMinimumChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final requiredDataOk =
+        form.isDieselVehicle &&
+        form.isNationalTrip &&
+        form.isFullTruckload &&
+        input.minimumAntt > 0;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: requiredDataOk
+                ? const Color(0xFFE8F5E9)
+                : const Color(0xFFFFF3E0),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: requiredDataOk
+                  ? const Color(0xFFA5D6A7)
+                  : const Color(0xFFFFCC80),
+            ),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                requiredDataOk
+                    ? Icons.verified_outlined
+                    : Icons.warning_amber_outlined,
+                color: requiredDataOk
+                    ? const Color(0xFF2E7D32)
+                    : const Color(0xFFE65100),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  requiredDataOk
+                      ? 'Requisitos principais preenchidos. Confira o piso na calculadora oficial antes de enviar.'
+                      : 'Preencha o piso oficial e confira se a operacao entra na regra antes de fechar valor.',
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        DropdownButtonFormField<String>(
+          initialValue: form.anttCargoType,
+          isExpanded: true,
+          decoration: const InputDecoration(
+            labelText: 'Tipo de carga na tabela',
+            prefixIcon: Icon(Icons.category_outlined),
+          ),
+          items: const [
+            DropdownMenuItem(value: 'Carga geral', child: Text('Carga geral')),
+            DropdownMenuItem(
+              value: 'Granel solido',
+              child: Text('Granel solido'),
+            ),
+            DropdownMenuItem(
+              value: 'Granel liquido',
+              child: Text('Granel liquido'),
+            ),
+            DropdownMenuItem(
+              value: 'Carga frigorificada',
+              child: Text('Carga frigorificada'),
+            ),
+            DropdownMenuItem(
+              value: 'Carga perigosa',
+              child: Text('Carga perigosa'),
+            ),
+            DropdownMenuItem(
+              value: 'Neogranel',
+              child: Text('Neogranel / especial'),
+            ),
+          ],
+          onChanged: (value) {
+            if (value == null) return;
+            onChanged(form.copyWith(anttCargoType: value));
+          },
+        ),
+        const SizedBox(height: 10),
+        DropdownButtonFormField<int>(
+          initialValue: form.anttAxles,
+          isExpanded: true,
+          decoration: const InputDecoration(
+            labelText: 'Eixos para consulta',
+            prefixIcon: Icon(Icons.alt_route_outlined),
+          ),
+          items: const [
+            DropdownMenuItem(value: 2, child: Text('2 eixos')),
+            DropdownMenuItem(value: 3, child: Text('3 eixos')),
+            DropdownMenuItem(value: 4, child: Text('4 eixos')),
+            DropdownMenuItem(value: 5, child: Text('5 eixos')),
+            DropdownMenuItem(value: 6, child: Text('6 eixos')),
+            DropdownMenuItem(value: 7, child: Text('7 eixos')),
+            DropdownMenuItem(value: 9, child: Text('9 eixos')),
+          ],
+          onChanged: (value) {
+            if (value == null) return;
+            onChanged(form.copyWith(anttAxles: value));
+          },
+        ),
+        const SizedBox(height: 10),
+        _MoneyField(
+          label: 'Piso ANTT oficial',
+          value: input.minimumAntt,
+          onChanged: onMinimumChanged,
+        ),
+        _AnttSwitch(
+          title: 'Transporte nacional remunerado',
+          value: form.isNationalTrip,
+          onChanged: (value) => onChanged(form.copyWith(isNationalTrip: value)),
+        ),
+        _AnttSwitch(
+          title: 'Veiculo movido a diesel',
+          value: form.isDieselVehicle,
+          onChanged: (value) =>
+              onChanged(form.copyWith(isDieselVehicle: value)),
+        ),
+        _AnttSwitch(
+          title: 'Carga lotacao / veiculo dedicado',
+          value: form.isFullTruckload,
+          onChanged: (value) =>
+              onChanged(form.copyWith(isFullTruckload: value)),
+        ),
+        _AnttSwitch(
+          title: 'Composicao veicular',
+          value: form.isVehicleComposition,
+          onChanged: (value) =>
+              onChanged(form.copyWith(isVehicleComposition: value)),
+        ),
+        _AnttSwitch(
+          title: 'Alto desempenho',
+          value: form.isHighPerformance,
+          onChanged: (value) =>
+              onChanged(form.copyWith(isHighPerformance: value)),
+        ),
+        _AnttSwitch(
+          title: 'Retorno vazio',
+          value: form.hasEmptyReturn,
+          onChanged: (value) => onChanged(form.copyWith(hasEmptyReturn: value)),
+        ),
+        const SizedBox(height: 8),
+        _ResultRow(
+          'Distancia ida',
+          '${quote.outboundDistanceKm.toStringAsFixed(0)} km',
+        ),
+        _ResultRow(
+          'Distancia total',
+          '${quote.totalDistanceKm.toStringAsFixed(0)} km',
+        ),
+        _ResultRow('Valor da cotacao', brl(quote.commercialValue)),
+        _ResultRow(
+          'Situacao',
+          quote.isBelowAntt ? 'abaixo do piso' : 'acima do piso',
+        ),
+      ],
+    );
+  }
+}
+
+class _AnttSwitch extends StatelessWidget {
+  const _AnttSwitch({
+    required this.title,
+    required this.value,
+    required this.onChanged,
+  });
+
+  final String title;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return SwitchListTile(
+      dense: true,
+      contentPadding: EdgeInsets.zero,
+      title: Text(title),
+      value: value,
+      onChanged: onChanged,
     );
   }
 }
@@ -946,20 +1483,151 @@ class _SegmentCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final width = MediaQuery.sizeOf(context).width;
-    return SizedBox(
-      width: width < 760 ? width : 420,
-      child: Card(
-        child: Padding(
-          padding: const EdgeInsets.all(18),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(title, style: Theme.of(context).textTheme.titleLarge),
-              const SizedBox(height: 14),
-              child,
-            ],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final cardWidth = width < 760 ? constraints.maxWidth : 420.0;
+        return SizedBox(
+          width: cardWidth,
+          child: Card(
+            color: Colors.white,
+            surfaceTintColor: Colors.white,
+            child: Padding(
+              padding: const EdgeInsets.all(18),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: Theme.of(context).textTheme.titleLarge),
+                  const SizedBox(height: 14),
+                  child,
+                ],
+              ),
+            ),
           ),
-        ),
+        );
+      },
+    );
+  }
+}
+
+class _CustomerPicker extends StatefulWidget {
+  const _CustomerPicker({
+    required this.value,
+    required this.onChanged,
+    required this.onCreate,
+  });
+
+  final String value;
+  final ValueChanged<String> onChanged;
+  final VoidCallback onCreate;
+
+  @override
+  State<_CustomerPicker> createState() => _CustomerPickerState();
+}
+
+class _CustomerPickerState extends State<_CustomerPicker> {
+  final _repository = CustomerRepository();
+  final _controller = TextEditingController();
+  List<Customer> _customers = const [];
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller.text = widget.value;
+    _load();
+  }
+
+  @override
+  void didUpdateWidget(covariant _CustomerPicker oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.value != widget.value && _controller.text != widget.value) {
+      _controller.text = widget.value;
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    final customers = await _repository.recentCustomers();
+    if (!mounted) return;
+    setState(() {
+      _customers = customers;
+      _loading = false;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final typed = _controller.text.trim().toLowerCase();
+    final matches = typed.isEmpty
+        ? _customers.take(5).toList(growable: false)
+        : _customers
+              .where((customer) {
+                final label = '${customer.name} ${customer.document}'
+                    .toLowerCase();
+                return label.contains(typed);
+              })
+              .take(5)
+              .toList(growable: false);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          TextField(
+            controller: _controller,
+            decoration: InputDecoration(
+              labelText: 'Cliente',
+              prefixIcon: const Icon(Icons.badge_outlined),
+              suffixIcon: _loading
+                  ? const Padding(
+                      padding: EdgeInsets.all(14),
+                      child: SizedBox.square(
+                        dimension: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    )
+                  : IconButton(
+                      tooltip: 'Cadastrar cliente',
+                      onPressed: widget.onCreate,
+                      icon: const Icon(Icons.person_add_alt_outlined),
+                    ),
+            ),
+            onChanged: widget.onChanged,
+          ),
+          const SizedBox(height: 8),
+          if (!_loading && matches.isNotEmpty)
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final customer in matches)
+                  ActionChip(
+                    avatar: Icon(
+                      customer.type == 'company'
+                          ? Icons.apartment_outlined
+                          : Icons.person_outline,
+                      size: 18,
+                    ),
+                    label: Text(customer.name),
+                    onPressed: () {
+                      _controller.text = customer.name;
+                      widget.onChanged(customer.name);
+                    },
+                  ),
+              ],
+            )
+          else if (!_loading)
+            OutlinedButton.icon(
+              onPressed: widget.onCreate,
+              icon: const Icon(Icons.person_add_alt_outlined),
+              label: const Text('Cadastrar novo cliente'),
+            ),
+        ],
       ),
     );
   }
@@ -1264,38 +1932,6 @@ class _NumberFieldState extends State<_NumberField> {
   }
 }
 
-class _NumberSlider extends StatelessWidget {
-  const _NumberSlider({
-    required this.label,
-    required this.suffix,
-    required this.value,
-    required this.min,
-    required this.max,
-    required this.onChanged,
-  });
-
-  final String label;
-  final String suffix;
-  final double value;
-  final double min;
-  final double max;
-  final ValueChanged<double> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('$label: ${value.toStringAsFixed(0)} $suffix'),
-          Slider(value: value, min: min, max: max, onChanged: onChanged),
-        ],
-      ),
-    );
-  }
-}
-
 class _ResultRow extends StatelessWidget {
   const _ResultRow(this.label, this.value);
 
@@ -1307,9 +1943,18 @@ class _ResultRow extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 5),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Expanded(child: Text(label)),
-          Text(value, style: const TextStyle(fontWeight: FontWeight.w700)),
+          const SizedBox(width: 12),
+          Flexible(
+            child: Text(
+              value,
+              textAlign: TextAlign.end,
+              overflow: TextOverflow.visible,
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+          ),
         ],
       ),
     );

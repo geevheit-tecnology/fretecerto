@@ -22,6 +22,8 @@ class SettingsPage extends ConsumerWidget {
           padding: const EdgeInsets.all(24),
           sliver: SliverList(
             delegate: SliverChildListDelegate([
+              _SettingsHero(input: input),
+              const SizedBox(height: 16),
               Wrap(
                 spacing: 16,
                 runSpacing: 16,
@@ -183,6 +185,103 @@ class SettingsPage extends ConsumerWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _SettingsHero extends StatelessWidget {
+  const _SettingsHero({required this.input});
+
+  final QuoteInput input;
+
+  @override
+  Widget build(BuildContext context) {
+    final compact = MediaQuery.sizeOf(context).width < 760;
+    final content = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Central de parametros comerciais',
+          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+            color: Colors.white,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Ajuste impostos, custos operacionais, margem e regras que entram nas cotacoes antes de enviar proposta ao cliente.',
+          style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+            color: Colors.white.withValues(alpha: .86),
+          ),
+        ),
+      ],
+    );
+    final metrics = Wrap(
+      spacing: 10,
+      runSpacing: 10,
+      children: [
+        _HeroMetric(label: 'Margem', value: '${input.marginPercent}%'),
+        _HeroMetric(label: 'ICMS', value: '${input.icmsPercent}%'),
+        _HeroMetric(label: 'Diesel', value: brl(input.dieselLiterPrice)),
+        _HeroMetric(
+          label: 'ANTT',
+          value: input.minimumAntt > 0 ? brl(input.minimumAntt) : 'manual',
+        ),
+      ],
+    );
+    return Container(
+      padding: const EdgeInsets.all(22),
+      decoration: BoxDecoration(
+        color: const Color(0xFF103B3A),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: compact
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [content, const SizedBox(height: 16), metrics],
+            )
+          : Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(flex: 2, child: content),
+                const SizedBox(width: 20),
+                Expanded(child: metrics),
+              ],
+            ),
+    );
+  }
+}
+
+class _HeroMetric extends StatelessWidget {
+  const _HeroMetric({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: .1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.white24),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(
+              color: Color(0xFF9DE3DA),
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(value, style: const TextStyle(color: Colors.white)),
+        ],
+      ),
     );
   }
 }

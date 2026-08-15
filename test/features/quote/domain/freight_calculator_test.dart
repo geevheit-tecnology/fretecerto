@@ -20,8 +20,8 @@ void main() {
       ),
     );
 
-    expect(quote.suggestedVehicle, 'VUC');
-    expect(quote.bodyType, 'Bau');
+    expect(quote.suggestedVehicle, 'VUC - 2 eixos');
+    expect(quote.bodyType, 'Definir conforme carga');
     expect(quote.totalDistanceKm, 856);
     expect(quote.fuelCost, closeTo(2088.64, 0.01));
     expect(quote.arlaCost, closeTo(77.04, 0.01));

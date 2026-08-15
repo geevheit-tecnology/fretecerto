@@ -87,17 +87,17 @@ class CommercialFreightCalculator implements FreightCalculator {
       minimumAnttValue: antt,
       commercialValue: commercial,
       suggestedVehicle: vehicle,
-      bodyType: input.totalVolumeM3 > 28 ? 'Sider' : 'Bau',
+      bodyType: 'Definir conforme carga',
       isBelowAntt: antt > 0 && commercial < antt,
     );
   }
 
   static String _vehicleFor(double weightKg, double volumeM3) {
-    if (weightKg <= 700 && volumeM3 <= 4) return 'Fiorino';
-    if (weightKg <= 1500 && volumeM3 <= 12) return 'Van';
-    if (weightKg <= 3000 && volumeM3 <= 20) return 'VUC';
-    if (weightKg <= 6000 && volumeM3 <= 32) return 'Toco';
-    if (weightKg <= 14000 && volumeM3 <= 55) return 'Truck';
-    return 'Carreta simples';
+    if (weightKg <= 700 && volumeM3 <= 4) return 'Leve - 2 eixos';
+    if (weightKg <= 1500 && volumeM3 <= 12) return 'Utilitario - 2 eixos';
+    if (weightKg <= 3000 && volumeM3 <= 20) return 'VUC - 2 eixos';
+    if (weightKg <= 6000 && volumeM3 <= 32) return 'Toco - 2 eixos';
+    if (weightKg <= 14000 && volumeM3 <= 55) return 'Truck - 3 eixos';
+    return 'Carreta - 5+ eixos';
   }
 }

@@ -21,7 +21,11 @@ GoRouter createRouter({String initialLocation = '/login'}) {
         routes: [
           GoRoute(path: '/', builder: (_, _) => const DashboardPage()),
           GoRoute(path: '/cotacao', builder: (_, _) => const QuotePage()),
-          GoRoute(path: '/clientes', builder: (_, _) => const CustomersPage()),
+          GoRoute(
+            path: '/clientes',
+            builder: (_, state) =>
+                CustomersPage(returnTo: state.uri.queryParameters['returnTo']),
+          ),
           GoRoute(
             path: '/localidades',
             builder: (_, _) => const LocationRatesPage(),
@@ -79,55 +83,10 @@ class AppShell extends StatelessWidget {
       body: Row(
         children: [
           if (MediaQuery.sizeOf(context).width >= 920)
-            NavigationRail(
-              extended: true,
+            _SideMenu(
               selectedIndex: selectedIndex,
-              onDestinationSelected: (index) => context.go(_routeFor(index)),
-              trailing: Expanded(
-                child: Align(
-                  alignment: Alignment.bottomCenter,
-                  child: Padding(
-                    padding: const EdgeInsets.only(bottom: 18),
-                    child: TextButton.icon(
-                      onPressed: () => _signOut(context),
-                      icon: const Icon(Icons.logout),
-                      label: const Text('Sair'),
-                    ),
-                  ),
-                ),
-              ),
-              destinations: const [
-                NavigationRailDestination(
-                  icon: Icon(Icons.dashboard_outlined),
-                  selectedIcon: Icon(Icons.dashboard),
-                  label: Text('Painel'),
-                ),
-                NavigationRailDestination(
-                  icon: Icon(Icons.request_quote_outlined),
-                  selectedIcon: Icon(Icons.request_quote),
-                  label: Text('Cotacao'),
-                ),
-                NavigationRailDestination(
-                  icon: Icon(Icons.badge_outlined),
-                  selectedIcon: Icon(Icons.badge),
-                  label: Text('Clientes'),
-                ),
-                NavigationRailDestination(
-                  icon: Icon(Icons.map_outlined),
-                  selectedIcon: Icon(Icons.map),
-                  label: Text('Localidades'),
-                ),
-                NavigationRailDestination(
-                  icon: Icon(Icons.group_outlined),
-                  selectedIcon: Icon(Icons.group),
-                  label: Text('Usuarios'),
-                ),
-                NavigationRailDestination(
-                  icon: Icon(Icons.tune_outlined),
-                  selectedIcon: Icon(Icons.tune),
-                  label: Text('Configuracoes'),
-                ),
-              ],
+              onSelected: (index) => context.go(_routeFor(index)),
+              onSignOut: () => _signOut(context),
             ),
           Expanded(child: child),
         ],
@@ -201,5 +160,235 @@ class AppShell extends StatelessWidget {
   static Future<void> _signOut(BuildContext context) async {
     await Supabase.instance.client.auth.signOut();
     if (context.mounted) context.go('/login');
+  }
+}
+
+class _SideMenu extends StatelessWidget {
+  const _SideMenu({
+    required this.selectedIndex,
+    required this.onSelected,
+    required this.onSignOut,
+  });
+
+  final int selectedIndex;
+  final ValueChanged<int> onSelected;
+  final VoidCallback onSignOut;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 286,
+      padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
+      decoration: const BoxDecoration(
+        color: Color(0xFF102A2A),
+        border: Border(right: BorderSide(color: Color(0xFFE0E6E8))),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 46,
+                height: 46,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: .1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.white24),
+                ),
+                child: const Icon(Icons.local_shipping, color: Colors.white),
+              ),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'FreteCerto',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 19,
+                      ),
+                    ),
+                    Text(
+                      'Comercial de fretes',
+                      style: TextStyle(color: Color(0xFFB9D6D2)),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 22),
+          FilledButton.icon(
+            onPressed: () => onSelected(1),
+            icon: const Icon(Icons.add),
+            label: const Text('Nova cotacao'),
+          ),
+          const SizedBox(height: 14),
+          Expanded(
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _MenuItem(
+                    selected: selectedIndex == 0,
+                    icon: Icons.space_dashboard_outlined,
+                    selectedIcon: Icons.space_dashboard,
+                    label: 'Painel',
+                    detail: 'Prioridades e insights',
+                    onTap: () => onSelected(0),
+                  ),
+                  _MenuItem(
+                    selected: selectedIndex == 1,
+                    icon: Icons.request_quote_outlined,
+                    selectedIcon: Icons.request_quote,
+                    label: 'Cotacao',
+                    detail: 'Valor, rota e veiculo',
+                    onTap: () => onSelected(1),
+                  ),
+                  _MenuItem(
+                    selected: selectedIndex == 2,
+                    icon: Icons.apartment_outlined,
+                    selectedIcon: Icons.apartment,
+                    label: 'Clientes',
+                    detail: 'CNPJ e carteira',
+                    onTap: () => onSelected(2),
+                  ),
+                  _MenuItem(
+                    selected: selectedIndex == 3,
+                    icon: Icons.route_outlined,
+                    selectedIcon: Icons.route,
+                    label: 'Rotas',
+                    detail: 'Tabelas por localidade',
+                    onTap: () => onSelected(3),
+                  ),
+                  _MenuItem(
+                    selected: selectedIndex == 4,
+                    icon: Icons.group_outlined,
+                    selectedIcon: Icons.group,
+                    label: 'Usuarios',
+                    detail: 'Acessos comerciais',
+                    onTap: () => onSelected(4),
+                  ),
+                  _MenuItem(
+                    selected: selectedIndex == 5,
+                    icon: Icons.tune_outlined,
+                    selectedIcon: Icons.tune,
+                    label: 'Configuracoes',
+                    detail: 'Custos e impostos',
+                    onTap: () => onSelected(5),
+                  ),
+                  const SizedBox(height: 10),
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: .08),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.white12),
+                    ),
+                    child: const Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Operacao de hoje',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        SizedBox(height: 6),
+                        Text(
+                          'Revise rotas sem ANTT e envie propostas prontas primeiro.',
+                          style: TextStyle(color: Color(0xFFB9D6D2)),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          TextButton.icon(
+            onPressed: onSignOut,
+            icon: const Icon(Icons.logout),
+            label: const Text('Sair'),
+            style: TextButton.styleFrom(foregroundColor: Colors.white),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MenuItem extends StatelessWidget {
+  const _MenuItem({
+    required this.selected,
+    required this.icon,
+    required this.selectedIcon,
+    required this.label,
+    required this.detail,
+    required this.onTap,
+  });
+
+  final bool selected;
+  final IconData icon;
+  final IconData selectedIcon;
+  final String label;
+  final String detail;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Material(
+        color: selected ? Colors.white : Colors.transparent,
+        borderRadius: BorderRadius.circular(8),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(8),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+            child: Row(
+              children: [
+                Icon(
+                  selected ? selectedIcon : icon,
+                  color: selected ? const Color(0xFF0E6F68) : Colors.white,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        label,
+                        style: TextStyle(
+                          color: selected
+                              ? const Color(0xFF102A2A)
+                              : Colors.white,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      Text(
+                        detail,
+                        style: TextStyle(
+                          color: selected
+                              ? const Color(0xFF526B68)
+                              : const Color(0xFFB9D6D2),
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }

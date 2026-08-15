@@ -55,17 +55,38 @@ void main() {
   testWidgets('fluxo principal cabe em mobile', (tester) async {
     await setSurface(tester, width: 390, height: 844);
     await tester.pumpWidget(_TestApp(initialLocation: '/'));
-    expect(find.text('Painel comercial'), findsWidgets);
+    expect(find.text('Central de receita'), findsWidgets);
 
     await tester.tap(find.text('Cotacao'));
     await tester.pumpAndSettle();
     expect(find.text('Nova cotacao'), findsWidgets);
+    expect(find.text('Formulario rapido sem compromisso'), findsOneWidget);
+    await tester.dragUntilVisible(
+      find.text('Consultar ANTT oficial'),
+      find.byType(CustomScrollView).last,
+      const Offset(0, -300),
+    );
     expect(find.text('Consultar ANTT oficial'), findsOneWidget);
+    await tester.dragUntilVisible(
+      find.text('Mapa da rota'),
+      find.byType(CustomScrollView).last,
+      const Offset(0, -300),
+    );
     expect(find.text('Mapa da rota'), findsOneWidget);
     expect(find.text('Calcular e aplicar'), findsOneWidget);
     expect(find.text('Conferir no mapa'), findsOneWidget);
-    expect(find.text('Veiculo recomendado'), findsOneWidget);
-    expect(find.text('Tipo e cliente'), findsOneWidget);
+    await tester.dragUntilVisible(
+      find.text('Porte operacional'),
+      find.byType(CustomScrollView).last,
+      const Offset(0, -500),
+    );
+    expect(find.text('Porte operacional'), findsOneWidget);
+    expect(find.text('Orcamento rapido'), findsWidgets);
+    await tester.dragUntilVisible(
+      find.widgetWithText(TextField, 'Origem'),
+      find.byType(CustomScrollView).last,
+      const Offset(0, 500),
+    );
     await tester.enterText(
       find.widgetWithText(TextField, 'Origem'),
       'Santos, SP',
@@ -98,16 +119,17 @@ void main() {
     await tester.pumpAndSettle();
     await tester.dragUntilVisible(
       find.widgetWithText(OutlinedButton, 'Salvar'),
-      find.byType(CustomScrollView),
-      const Offset(0, -500),
+      find.byType(CustomScrollView).last,
+      const Offset(0, -900),
     );
     await tester.ensureVisible(find.widgetWithText(OutlinedButton, 'Salvar'));
+    await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(OutlinedButton, 'Salvar'));
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Painel'));
     await tester.pumpAndSettle();
-    expect(find.text('Painel comercial'), findsWidgets);
+    expect(find.text('Central de receita'), findsWidgets);
     await tester.dragUntilVisible(
       find.text('Historico de cotacoes'),
       find.byType(CustomScrollView),

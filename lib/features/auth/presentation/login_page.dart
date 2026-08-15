@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -34,17 +36,31 @@ class _LoginPageState extends State<LoginPage> {
 
     setState(() => _loading = true);
     try {
-      await Supabase.instance.client.auth.signInWithPassword(
-        email: email,
-        password: password,
-      );
+      final response = await Supabase.instance.client.auth
+          .signInWithPassword(email: email, password: password)
+          .timeout(const Duration(seconds: 18));
       if (!mounted) return;
+      if (response.session == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Login aceito, mas a sessao nao foi criada.'),
+          ),
+        );
+        return;
+      }
       context.go('/');
     } on AuthException catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(_authErrorMessage(error))));
+    } on TimeoutException {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Tempo esgotado. Confira a internet do aparelho.'),
+        ),
+      );
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -61,7 +77,7 @@ class _LoginPageState extends State<LoginPage> {
       return 'E-mail ou senha incorretos.';
     }
     if (message.contains('email not confirmed')) {
-      return 'Usuario ainda nao confirmado no Supabase.';
+      return 'Usuario ainda nao confirmado. Fale com o administrador.';
     }
     if (message.contains('email')) {
       return error.message;
@@ -86,10 +102,10 @@ class _LoginPageState extends State<LoginPage> {
 
   @override
   Widget build(BuildContext context) {
-    final compact = MediaQuery.sizeOf(context).width < 760;
+    final compact = MediaQuery.sizeOf(context).width < 900;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF2F5F4),
+      backgroundColor: const Color(0xFFF7F8F6),
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
@@ -100,8 +116,8 @@ class _LoginPageState extends State<LoginPage> {
                   ? Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        _BrandPanel(height: 300),
-                        const SizedBox(height: 16),
+                        const _MobileHeader(),
+                        const SizedBox(height: 18),
                         _LoginForm(
                           emailController: _emailController,
                           passwordController: _passwordController,
@@ -120,8 +136,8 @@ class _LoginPageState extends State<LoginPage> {
                   : Row(
                       crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
-                        Expanded(flex: 6, child: _BrandPanel(height: 540)),
-                        const SizedBox(width: 32),
+                        const Expanded(flex: 6, child: _BrandPanel()),
+                        const SizedBox(width: 36),
                         Expanded(
                           flex: 5,
                           child: _LoginForm(
@@ -169,47 +185,38 @@ class _LoginForm extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      elevation: 0,
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFE1E5E2)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: .05),
+            blurRadius: 28,
+            offset: const Offset(0, 14),
+          ),
+        ],
+      ),
       child: Padding(
-        padding: const EdgeInsets.all(30),
+        padding: const EdgeInsets.all(32),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Row(
-              children: [
-                Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFE0F2EF),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Icon(
-                    Icons.verified_user_outlined,
-                    color: Color(0xFF0E6F68),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Acesso seguro',
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      const Text('Entre com o usuario criado no Supabase.'),
-                    ],
-                  ),
-                ),
-              ],
+            Text(
+              'Acesso seguro',
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.w800,
+                color: const Color(0xFF193B38),
+              ),
             ),
-            const SizedBox(height: 26),
+            const SizedBox(height: 6),
+            const Text(
+              'Use seu e-mail corporativo para entrar no painel de fretes.',
+              style: TextStyle(color: Color(0xFF65716D)),
+            ),
+            const SizedBox(height: 28),
             TextField(
               controller: emailController,
               keyboardType: TextInputType.emailAddress,
@@ -242,16 +249,27 @@ class _LoginForm extends StatelessWidget {
             const SizedBox(height: 20),
             SizedBox(
               height: 52,
-              child: FilledButton.icon(
+              child: FilledButton(
                 onPressed: loading ? null : onSubmit,
-                icon: loading
-                    ? const SizedBox.square(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.max,
+                  children: [
+                    if (loading)
+                      const SizedBox.square(
                         dimension: 18,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
-                    : const Icon(Icons.login),
-                label: Text(
-                  loading ? 'Validando acesso...' : 'Entrar no painel',
+                    else
+                      const Icon(Icons.arrow_forward),
+                    const SizedBox(width: 10),
+                    Flexible(
+                      child: Text(
+                        loading ? 'Validando acesso...' : 'Entrar no painel',
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -263,15 +281,15 @@ class _LoginForm extends StatelessWidget {
                 child: const Text('Recuperar senha'),
               ),
             ),
-            const Divider(height: 30),
+            const Divider(height: 32),
             const _TrustLine(
-              icon: Icons.admin_panel_settings_outlined,
-              text: 'Permissoes protegidas por Supabase Auth.',
+              icon: Icons.lock_outline,
+              text: 'Acesso restrito a usuarios autorizados.',
             ),
             const SizedBox(height: 8),
             const _TrustLine(
-              icon: Icons.cloud_done_outlined,
-              text: 'Clientes e propostas preparados para nuvem.',
+              icon: Icons.assignment_turned_in_outlined,
+              text: 'Historico, clientes e propostas em ambiente protegido.',
             ),
           ],
         ),
@@ -299,119 +317,169 @@ class _TrustLine extends StatelessWidget {
 }
 
 class _BrandPanel extends StatelessWidget {
-  const _BrandPanel({required this.height});
-
-  final double height;
+  const _BrandPanel();
 
   @override
   Widget build(BuildContext context) {
-    final compact = height <= 540;
     return Container(
-      height: height,
-      padding: EdgeInsets.all(compact ? 22 : 32),
+      height: 500,
+      padding: const EdgeInsets.all(28),
       decoration: BoxDecoration(
-        color: const Color(0xFF103B3A),
+        color: const Color(0xFF173C38),
         borderRadius: BorderRadius.circular(8),
+        image: const DecorationImage(
+          image: AssetImage('assets/images/freight_quote_login.png'),
+          fit: BoxFit.cover,
+          alignment: Alignment.centerRight,
+        ),
+      ),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(8),
+          gradient: LinearGradient(
+            colors: [
+              const Color(0xFF102A2A).withValues(alpha: .92),
+              const Color(0xFF102A2A).withValues(alpha: .72),
+              const Color(0xFF102A2A).withValues(alpha: .22),
+            ],
+            stops: const [0, .48, 1],
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(2),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(
+                    Icons.local_shipping_outlined,
+                    color: Colors.white,
+                  ),
+                  const SizedBox(width: 10),
+                  const Expanded(
+                    child: Text(
+                      'FreteCerto',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 22,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 38),
+              SizedBox(
+                width: 360,
+                child: Text(
+                  'Cotacao de frete com criterio comercial',
+                  style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                    height: 1.05,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: 390,
+                child: Text(
+                  'Preco, rota, custo, margem e conferencia de piso minimo em uma rotina preparada para venda consultiva.',
+                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                    color: Colors.white.withValues(alpha: .86),
+                    height: 1.35,
+                  ),
+                ),
+              ),
+              const Spacer(),
+              const _OperationalSummary(),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MobileHeader extends StatelessWidget {
+  const _MobileHeader();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Row(
+      children: [
+        Icon(Icons.local_shipping_outlined, color: Color(0xFF173C38)),
+        SizedBox(width: 10),
+        Text(
+          'FreteCerto',
+          style: TextStyle(
+            color: Color(0xFF173C38),
+            fontSize: 22,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _OperationalSummary extends StatelessWidget {
+  const _OperationalSummary();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: .08),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.white.withValues(alpha: .16)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Container(
-                width: compact ? 44 : 52,
-                height: compact ? 44 : 52,
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: .12),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.white24),
-                ),
-                child: Icon(
-                  Icons.local_shipping,
-                  color: Colors.white,
-                  size: compact ? 28 : 34,
-                ),
-              ),
-              const SizedBox(width: 12),
-              const Expanded(
-                child: Text(
-                  'FreteCerto',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 22,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ),
-            ],
+          const Text(
+            'Rotina do dia',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800),
           ),
-          const Spacer(),
-          Text(
-            'Propostas de frete com padrao comercial.',
-            style:
-                (compact
-                        ? Theme.of(context).textTheme.headlineMedium
-                        : Theme.of(context).textTheme.displaySmall)
-                    ?.copyWith(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w800,
-                    ),
+          const SizedBox(height: 14),
+          _SummaryLine(
+            icon: Icons.route_outlined,
+            text: 'Conferir origem, destino e distancia',
           ),
-          const SizedBox(height: 12),
-          Text(
-            'Cotacao, rota, veiculo ideal, composicao de custos, PDF, Excel e envio por WhatsApp ou e-mail em um fluxo unico.',
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              color: Colors.white.withValues(alpha: .86),
-            ),
-            maxLines: compact ? 4 : 3,
-            overflow: TextOverflow.ellipsis,
+          _SummaryLine(
+            icon: Icons.price_check_outlined,
+            text: 'Validar custo, margem e piso minimo',
           ),
-          if (!compact) ...[
-            const SizedBox(height: 24),
-            Wrap(
-              spacing: 10,
-              runSpacing: 10,
-              children: const [
-                _MetricPill(label: 'PDF', value: 'Proposta'),
-                _MetricPill(label: 'CNPJ', value: 'Consulta'),
-                _MetricPill(label: 'Mapa', value: 'Rota'),
-              ],
-            ),
-          ],
+          _SummaryLine(
+            icon: Icons.picture_as_pdf_outlined,
+            text: 'Enviar proposta ou contrato ao cliente',
+          ),
         ],
       ),
     );
   }
 }
 
-class _MetricPill extends StatelessWidget {
-  const _MetricPill({required this.label, required this.value});
+class _SummaryLine extends StatelessWidget {
+  const _SummaryLine({required this.icon, required this.text});
 
-  final String label;
-  final String value;
+  final IconData icon;
+  final String text;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: .1),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.white24),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
         children: [
-          Text(
-            label,
-            style: const TextStyle(
-              color: Color(0xFF9DE3DA),
-              fontWeight: FontWeight.w800,
-            ),
+          Icon(icon, color: const Color(0xFF9DE3DA), size: 19),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(text, style: const TextStyle(color: Colors.white)),
           ),
-          const SizedBox(height: 2),
-          Text(value, style: const TextStyle(color: Colors.white)),
         ],
       ),
     );

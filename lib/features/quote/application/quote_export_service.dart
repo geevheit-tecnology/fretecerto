@@ -29,7 +29,7 @@ class QuoteExportService {
       ['Peso kg', input.totalWeightKg.toStringAsFixed(0)],
       ['Cubagem m3', input.totalVolumeM3.toStringAsFixed(1)],
       ['Valor NF', brl(input.invoiceValue)],
-      ['Veiculo recomendado', quote.suggestedVehicle],
+      ['Porte operacional', quote.suggestedVehicle],
       ['Carroceria', quote.bodyType],
       ['Distancia ida km', quote.outboundDistanceKm.toStringAsFixed(0)],
       ['Distancia total km', quote.totalDistanceKm.toStringAsFixed(0)],

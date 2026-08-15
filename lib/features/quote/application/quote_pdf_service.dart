@@ -20,6 +20,14 @@ class QuotePdfService {
     String origin = 'Guarulhos, SP',
     String destination = 'Contagem, MG',
     String cargoType = 'Carga seca paletizada',
+    String anttCargoType = 'Carga geral',
+    int anttAxles = 2,
+    bool isDieselVehicle = true,
+    bool isNationalTrip = true,
+    bool isFullTruckload = true,
+    bool isVehicleComposition = true,
+    bool isHighPerformance = false,
+    bool hasEmptyReturn = false,
   }) async {
     final document = pw.Document(
       title: 'Proposta comercial de frete',
@@ -78,11 +86,29 @@ class QuotePdfService {
           pw.SizedBox(height: 14),
           _section('Carga e recomendacao', [
             _line('Descricao', cargoType),
+            _line('Tipo ANTT', anttCargoType),
             _line('Peso total', '${input.totalWeightKg.toStringAsFixed(0)} kg'),
             _line('Cubagem', '${input.totalVolumeM3.toStringAsFixed(1)} m3'),
-            _line('Veiculo recomendado', quote.suggestedVehicle),
-            _line('Carroceria recomendada', quote.bodyType),
+            _line('Porte operacional', quote.suggestedVehicle),
+            _line('Eixos ANTT', '$anttAxles eixos'),
+            _line('Carroceria', quote.bodyType),
             _line('Valor aproximado da NF', brl(input.invoiceValue)),
+          ]),
+          pw.SizedBox(height: 14),
+          _section('Conferencia ANTT', [
+            _line('Transporte nacional', _yesNo(isNationalTrip)),
+            _line('Veiculo diesel', _yesNo(isDieselVehicle)),
+            _line('Carga lotacao', _yesNo(isFullTruckload)),
+            _line('Composicao veicular', _yesNo(isVehicleComposition)),
+            _line('Alto desempenho', _yesNo(isHighPerformance)),
+            _line('Retorno vazio', _yesNo(hasEmptyReturn)),
+            _line('Piso informado', brl(quote.minimumAnttValue)),
+            _line(
+              'Status',
+              quote.isBelowAntt
+                  ? 'Abaixo do piso informado'
+                  : 'Acima do piso informado',
+            ),
           ]),
           pw.SizedBox(height: 14),
           _commercialTable(input, quote),
@@ -95,6 +121,130 @@ class QuotePdfService {
           alignment: pw.Alignment.centerRight,
           child: pw.Text(
             'FreteCerto | Proposta ${context.pageNumber}/${context.pagesCount}',
+            style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey600),
+          ),
+        ),
+      ),
+    );
+
+    return document.save();
+  }
+
+  Future<Uint8List> buildFreightContract({
+    required QuoteInput input,
+    required FreightQuote quote,
+    required String quoteType,
+    required String customerName,
+    required String sellerName,
+    required String origin,
+    required String destination,
+    required String cargoType,
+    String anttCargoType = 'Carga geral',
+    int anttAxles = 2,
+    bool isDieselVehicle = true,
+    bool isNationalTrip = true,
+    bool isFullTruckload = true,
+    bool isVehicleComposition = true,
+    bool isHighPerformance = false,
+    bool hasEmptyReturn = false,
+  }) async {
+    final document = pw.Document(
+      title: 'Contrato de prestacao de servico de transporte',
+      author: 'FreteCerto',
+      subject: 'Minuta comercial gerada a partir da cotacao',
+    );
+    final generatedAt = DateFormat(
+      'dd/MM/yyyy HH:mm',
+      'pt_BR',
+    ).format(DateTime.now());
+
+    document.addPage(
+      pw.MultiPage(
+        pageTheme: pw.PageTheme(
+          margin: const pw.EdgeInsets.all(28),
+          theme: pw.ThemeData.withFont(base: pw.Font.helvetica()),
+        ),
+        build: (context) => [
+          _header(generatedAt),
+          pw.SizedBox(height: 18),
+          pw.Text(
+            'Minuta de contrato de transporte rodoviario de cargas',
+            style: pw.TextStyle(
+              fontSize: 18,
+              fontWeight: pw.FontWeight.bold,
+              color: PdfColor.fromHex('#103B3A'),
+            ),
+          ),
+          pw.SizedBox(height: 12),
+          _section('Partes', [
+            _line('Contratante', customerName),
+            _line('Contratada', 'FreteCerto / transportadora responsavel'),
+            _line('Responsavel comercial', sellerName),
+            _line('Documento base', quoteType),
+          ]),
+          pw.SizedBox(height: 12),
+          _section('Objeto', [
+            _paragraph(
+              'Prestacao de servico de transporte rodoviario de cargas, contemplando coleta, deslocamento e entrega conforme os dados operacionais desta cotacao.',
+            ),
+            _line('Origem', origin),
+            _line('Destino', destination),
+            _line('Carga', cargoType),
+            _line('Tipo ANTT', anttCargoType),
+            _line('Peso total', '${input.totalWeightKg.toStringAsFixed(0)} kg'),
+            _line('Cubagem', '${input.totalVolumeM3.toStringAsFixed(1)} m3'),
+            _line('Porte operacional', quote.suggestedVehicle),
+            _line('Eixos ANTT', '$anttAxles eixos'),
+            _line('Carroceria', quote.bodyType),
+          ]),
+          pw.SizedBox(height: 12),
+          _section('Preco e condicoes', [
+            _line('Valor do frete', brl(quote.commercialValue)),
+            _line(
+              'Distancia total estimada',
+              '${quote.totalDistanceKm.toStringAsFixed(0)} km',
+            ),
+            _line('Transporte nacional', _yesNo(isNationalTrip)),
+            _line('Veiculo diesel', _yesNo(isDieselVehicle)),
+            _line('Carga lotacao', _yesNo(isFullTruckload)),
+            _line('Composicao veicular', _yesNo(isVehicleComposition)),
+            _line('Alto desempenho', _yesNo(isHighPerformance)),
+            _line('Retorno vazio', _yesNo(hasEmptyReturn)),
+            _line('Piso ANTT informado', brl(quote.minimumAnttValue)),
+            _line('Validade da proposta', '7 dias corridos'),
+            _line(
+              'Impostos e taxas',
+              'Incluidos conforme parametros informados na cotacao',
+            ),
+          ]),
+          pw.SizedBox(height: 12),
+          _section('Clausulas operacionais', [
+            _paragraph(
+              '1. A execucao do transporte depende de confirmacao cadastral, disponibilidade operacional, liberacao documental e validacao fiscal.',
+            ),
+            _paragraph(
+              '2. Custos nao informados, como estadia, reentrega, armazenagem, escolta, ajudantes, restricoes de acesso ou espera excedente, poderao ser cobrados separadamente.',
+            ),
+            _paragraph(
+              '3. A carroceria sera definida pelas partes conforme natureza da carga, necessidade de protecao, forma de carregamento e regras do embarcador.',
+            ),
+            _paragraph(
+              '4. A contratante declara que as informacoes de carga, nota fiscal, origem e destino foram prestadas corretamente para composicao do valor.',
+            ),
+            _paragraph(
+              '5. Esta minuta deve ser revisada juridicamente antes da assinatura definitiva.',
+            ),
+          ]),
+          pw.SizedBox(height: 24),
+          pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: [_signature('Contratante'), _signature('Contratada')],
+          ),
+        ],
+        footer: (context) => pw.Container(
+          alignment: pw.Alignment.centerRight,
+          child: pw.Text(
+            'FreteCerto | Contrato ${context.pageNumber}/${context.pagesCount}',
             style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey600),
           ),
         ),
@@ -169,7 +319,7 @@ class QuotePdfService {
           pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.end,
             children: [
-              pw.Text('Veiculo', style: _labelStyle()),
+              pw.Text('Porte operacional', style: _labelStyle()),
               pw.Text(quote.suggestedVehicle, style: _valueStyle()),
               pw.SizedBox(height: 8),
               pw.Text('Carroceria', style: _labelStyle()),
@@ -319,6 +469,28 @@ class QuotePdfService {
       ),
     );
   }
+
+  static pw.Widget _paragraph(String value) {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.symmetric(vertical: 4),
+      child: pw.Text(value, style: _valueStyle(), textAlign: pw.TextAlign.left),
+    );
+  }
+
+  static pw.Widget _signature(String label) {
+    return pw.SizedBox(
+      width: 210,
+      child: pw.Column(
+        children: [
+          pw.Container(height: 1, color: PdfColors.grey600),
+          pw.SizedBox(height: 6),
+          pw.Text(label, style: _labelStyle()),
+        ],
+      ),
+    );
+  }
+
+  static String _yesNo(bool value) => value ? 'Sim' : 'Nao';
 
   static pw.TextStyle _sectionTitleStyle() => pw.TextStyle(
     fontSize: 13,

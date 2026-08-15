@@ -29,6 +29,14 @@ class QuoteFormState {
     this.origin = 'Guarulhos, SP',
     this.destination = 'Contagem, MG',
     this.cargoType = 'Carga seca paletizada',
+    this.anttCargoType = 'Carga geral',
+    this.anttAxles = 2,
+    this.isDieselVehicle = true,
+    this.isNationalTrip = true,
+    this.isFullTruckload = true,
+    this.isVehicleComposition = true,
+    this.isHighPerformance = false,
+    this.hasEmptyReturn = false,
   });
 
   final String quoteType;
@@ -37,6 +45,14 @@ class QuoteFormState {
   final String origin;
   final String destination;
   final String cargoType;
+  final String anttCargoType;
+  final int anttAxles;
+  final bool isDieselVehicle;
+  final bool isNationalTrip;
+  final bool isFullTruckload;
+  final bool isVehicleComposition;
+  final bool isHighPerformance;
+  final bool hasEmptyReturn;
 
   QuoteFormState copyWith({
     String? quoteType,
@@ -45,6 +61,14 @@ class QuoteFormState {
     String? origin,
     String? destination,
     String? cargoType,
+    String? anttCargoType,
+    int? anttAxles,
+    bool? isDieselVehicle,
+    bool? isNationalTrip,
+    bool? isFullTruckload,
+    bool? isVehicleComposition,
+    bool? isHighPerformance,
+    bool? hasEmptyReturn,
   }) {
     return QuoteFormState(
       quoteType: quoteType ?? this.quoteType,
@@ -53,6 +77,14 @@ class QuoteFormState {
       origin: origin ?? this.origin,
       destination: destination ?? this.destination,
       cargoType: cargoType ?? this.cargoType,
+      anttCargoType: anttCargoType ?? this.anttCargoType,
+      anttAxles: anttAxles ?? this.anttAxles,
+      isDieselVehicle: isDieselVehicle ?? this.isDieselVehicle,
+      isNationalTrip: isNationalTrip ?? this.isNationalTrip,
+      isFullTruckload: isFullTruckload ?? this.isFullTruckload,
+      isVehicleComposition: isVehicleComposition ?? this.isVehicleComposition,
+      isHighPerformance: isHighPerformance ?? this.isHighPerformance,
+      hasEmptyReturn: hasEmptyReturn ?? this.hasEmptyReturn,
     );
   }
 }
