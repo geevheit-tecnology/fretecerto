@@ -50,6 +50,8 @@ class DashboardPage extends ConsumerWidget {
                 wallet: wallet,
                 pendingAntt: pendingAntt,
               ),
+              const SizedBox(height: 12),
+              const _AnttServiceNotice(),
               const SizedBox(height: 18),
               const _HomeSectionTitle(
                 title: 'Acoes rapidas',
@@ -332,6 +334,39 @@ class _HeroBadge extends StatelessWidget {
       backgroundColor: Colors.white.withValues(alpha: .12),
       side: BorderSide(color: Colors.white.withValues(alpha: .18)),
       labelStyle: const TextStyle(color: Colors.white),
+    );
+  }
+}
+
+class _AnttServiceNotice extends StatelessWidget {
+  const _AnttServiceNotice();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFE0E6E8)),
+      ),
+      child: Wrap(
+        spacing: 10,
+        runSpacing: 8,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          const Icon(Icons.support_agent_outlined, color: Color(0xFF0E6F68)),
+          Text(
+            'Atendimento ao usuario ANTT',
+            style: Theme.of(
+              context,
+            ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+          ),
+          const Text('Ligue 166'),
+          const Text('www.antt.gov.br/faleconosco'),
+        ],
+      ),
     );
   }
 }
