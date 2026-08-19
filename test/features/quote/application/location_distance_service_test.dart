@@ -18,7 +18,7 @@ void main() {
   });
 
   test('servico de mapa usa fallback local quando nao existe chave', () async {
-    final service = GoogleMapsDistanceService(apiKey: '');
+    final service = OpenRouteServiceDistanceService(apiKey: '');
 
     final result = await service.resolveRoadDistance(
       'Santos, SP',

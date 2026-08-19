@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -16,6 +17,7 @@ import '../application/quote_export_service.dart';
 import '../application/quote_pdf_service.dart';
 import '../domain/freight_quote.dart';
 import '../domain/quote_input.dart';
+import '../domain/quote_validation.dart';
 import '../domain/saved_quote.dart';
 import 'quote_controller.dart';
 import 'quote_history_controller.dart';
@@ -29,6 +31,17 @@ class QuotePage extends ConsumerStatefulWidget {
 
 class _QuotePageState extends ConsumerState<QuotePage> {
   bool _savingQuote = false;
+  bool _hasCalculated = false;
+  bool _autoRouteSearching = false;
+  Timer? _routeLookupTimer;
+  String? _routeLookupMessage;
+  QuoteValidationResult? _lastValidation;
+
+  @override
+  void dispose() {
+    _routeLookupTimer?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -36,6 +49,11 @@ class _QuotePageState extends ConsumerState<QuotePage> {
     final form = ref.watch(quoteFormProvider);
     final quote = ref.watch(freightQuoteProvider);
     final distanceService = ref.watch(locationDistanceServiceProvider);
+    final ibgeMunicipalities =
+        ref.watch(ibgeMunicipalitiesProvider).value ?? const [];
+    final validation = _lastValidation;
+    final currentValidation = _validate(input, form);
+    final resultReady = _hasCalculated && currentValidation.isValid;
 
     return CustomScrollView(
       slivers: [
@@ -52,18 +70,32 @@ class _QuotePageState extends ConsumerState<QuotePage> {
                 totalWeightKg: input.totalWeightKg,
                 totalVolumeM3: input.totalVolumeM3,
                 invoiceValue: input.invoiceValue,
-                commercialValue: quote.commercialValue,
+                commercialValue: resultReady ? quote.commercialValue : 0,
                 suggestedVehicle: quote.suggestedVehicle,
-                bodyType: quote.bodyType,
+                bodyType: form.bodyType,
                 totalDistanceKm: quote.totalDistanceKm,
               ),
               const SizedBox(height: 16),
               _ModeGuide(quoteType: form.quoteType),
               const SizedBox(height: 12),
               _QuickActionBar(
+                onCalculate: () => _calculateQuote(context, input, form),
                 onAntt: () => _openAntt(context),
-                onEmail: () => _sendEmail(context, input, quote, form),
-                onWhatsApp: () => _sendWhatsApp(context, input, quote, form),
+                onEmail: () {
+                  if (!_ensureReadyAndNotify(context, input, form)) return;
+                  _sendEmail(context, input, quote, form);
+                },
+                onWhatsApp: () {
+                  if (!_ensureReadyAndNotify(context, input, form)) return;
+                  _sendWhatsApp(context, input, quote, form);
+                },
+                onClear: () {
+                  _clearForm(ref, form.quoteType);
+                  setState(() {
+                    _hasCalculated = false;
+                    _lastValidation = null;
+                  });
+                },
               ),
               const SizedBox(height: 16),
               Wrap(
@@ -72,10 +104,12 @@ class _QuotePageState extends ConsumerState<QuotePage> {
                 children: [
                   _SegmentCard(
                     title: form.quoteType == 'Orcamento'
-                        ? 'Orcamento rapido'
+                        ? 'Pedido do cliente'
                         : 'Cliente e proposta',
                     child: Column(
                       children: [
+                        const _WorkflowHint(),
+                        const SizedBox(height: 10),
                         SegmentedButton<String>(
                           segments: const [
                             ButtonSegment(
@@ -103,6 +137,7 @@ class _QuotePageState extends ConsumerState<QuotePage> {
                             ref
                                 .read(quoteFormProvider.notifier)
                                 .update(form.copyWith(customerName: value));
+                            _markDirty();
                           },
                           onCreate: () =>
                               context.go('/clientes?returnTo=/cotacao'),
@@ -114,6 +149,19 @@ class _QuotePageState extends ConsumerState<QuotePage> {
                             ref
                                 .read(quoteFormProvider.notifier)
                                 .update(form.copyWith(sellerName: value));
+                            _markDirty();
+                          },
+                        ),
+                        _NumberField(
+                          label: 'Validade comercial',
+                          suffix: 'dias',
+                          value: form.validityDays.toDouble(),
+                          onChanged: (value) {
+                            final days = value.round().clamp(1, 90);
+                            ref
+                                .read(quoteFormProvider.notifier)
+                                .update(form.copyWith(validityDays: days));
+                            _markDirty();
                           },
                         ),
                       ],
@@ -127,6 +175,7 @@ class _QuotePageState extends ConsumerState<QuotePage> {
                           label: 'Origem',
                           value: form.origin,
                           service: distanceService,
+                          ibgeMunicipalities: ibgeMunicipalities,
                           onChanged: (value) {
                             final distance = distanceService
                                 .estimateRoadDistanceKm(
@@ -136,46 +185,106 @@ class _QuotePageState extends ConsumerState<QuotePage> {
                             ref
                                 .read(quoteFormProvider.notifier)
                                 .update(form.copyWith(origin: value));
+                            _markDirty();
                             if (distance != null) {
-                              _update(ref, input, distanceKm: distance);
+                              _update(
+                                ref,
+                                input,
+                                distanceKm: distance,
+                                returnDistanceKm: form.hasEmptyReturn
+                                    ? distance
+                                    : input.returnDistanceKm,
+                              );
                             }
+                            _scheduleAutoRouteLookup(distanceService);
                           },
                         ),
                         _LocalityField(
                           label: 'Destino',
                           value: form.destination,
                           service: distanceService,
+                          ibgeMunicipalities: ibgeMunicipalities,
                           onChanged: (value) {
                             final distance = distanceService
                                 .estimateRoadDistanceKm(form.origin, value);
                             ref
                                 .read(quoteFormProvider.notifier)
                                 .update(form.copyWith(destination: value));
+                            _markDirty();
                             if (distance != null) {
-                              _update(ref, input, distanceKm: distance);
+                              _update(
+                                ref,
+                                input,
+                                distanceKm: distance,
+                                returnDistanceKm: form.hasEmptyReturn
+                                    ? distance
+                                    : input.returnDistanceKm,
+                              );
                             }
+                            _scheduleAutoRouteLookup(distanceService);
                           },
                         ),
                         _NumberField(
                           label: 'Distancia rodoviaria',
                           suffix: 'km',
                           value: input.distanceKm,
-                          onChanged: (value) =>
-                              _update(ref, input, distanceKm: value),
+                          onChanged: (value) => _update(
+                            ref,
+                            input,
+                            distanceKm: value,
+                            returnDistanceKm: form.hasEmptyReturn
+                                ? value
+                                : input.returnDistanceKm,
+                          ),
                         ),
+                        SwitchListTile(
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('Cobrar retorno vazio'),
+                          subtitle: const Text(
+                            'Use somente quando o retorno deve entrar no custo.',
+                          ),
+                          value: form.hasEmptyReturn,
+                          onChanged: (value) {
+                            ref
+                                .read(quoteFormProvider.notifier)
+                                .update(form.copyWith(hasEmptyReturn: value));
+                            _update(
+                              ref,
+                              input,
+                              returnDistanceKm: value ? input.distanceKm : 0,
+                            );
+                          },
+                        ),
+                        if (form.hasEmptyReturn)
+                          _NumberField(
+                            label: 'Km de retorno vazio',
+                            suffix: 'km',
+                            value: input.returnDistanceKm,
+                            onChanged: (value) =>
+                                _update(ref, input, returnDistanceKm: value),
+                          ),
                         _RouteMapPanel(
                           origin: form.origin,
                           destination: form.destination,
                           distanceKm: input.distanceKm,
+                          searching: _autoRouteSearching,
+                          message: _routeLookupMessage,
                           service: distanceService,
-                          onDistanceResolved: (distance) =>
-                              _update(ref, input, distanceKm: distance),
+                          onDistanceResolved: (distance) => _update(
+                            ref,
+                            input,
+                            distanceKm: distance,
+                            returnDistanceKm: form.hasEmptyReturn
+                                ? distance
+                                : input.returnDistanceKm,
+                          ),
                         ),
                       ],
                     ),
                   ),
                   _SegmentCard(
-                    title: 'Carga',
+                    title: 'Carga e veiculo',
                     child: Column(
                       children: [
                         _NumberField(
@@ -199,6 +308,16 @@ class _QuotePageState extends ConsumerState<QuotePage> {
                             ref
                                 .read(quoteFormProvider.notifier)
                                 .update(form.copyWith(cargoType: value));
+                            _markDirty();
+                          },
+                        ),
+                        _BodyTypeSelector(
+                          value: form.bodyType,
+                          onChanged: (value) {
+                            ref
+                                .read(quoteFormProvider.notifier)
+                                .update(form.copyWith(bodyType: value));
+                            _markDirty();
                           },
                         ),
                         _MoneyField(
@@ -230,6 +349,7 @@ class _QuotePageState extends ConsumerState<QuotePage> {
                       quote: quote,
                       onChanged: (next) {
                         ref.read(quoteFormProvider.notifier).update(next);
+                        _markDirty();
                       },
                       onMinimumChanged: (value) =>
                           _update(ref, input, minimumAntt: value),
@@ -241,7 +361,7 @@ class _QuotePageState extends ConsumerState<QuotePage> {
                       child: Column(
                         children: [
                           _MoneyField(
-                            label: 'Pedagio ida',
+                            label: 'Pedagio total informado',
                             value: input.toll,
                             onChanged: (value) =>
                                 _update(ref, input, toll: value),
@@ -279,51 +399,82 @@ class _QuotePageState extends ConsumerState<QuotePage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _ResultRow('Porte operacional', quote.suggestedVehicle),
-                        _VehicleRecommendation(
-                          vehicle: quote.suggestedVehicle,
-                          bodyType: quote.bodyType,
-                          weightKg: input.totalWeightKg,
-                          volumeM3: input.totalVolumeM3,
-                        ),
-                        const SizedBox(height: 8),
-                        _ResultRow('Carroceria', quote.bodyType),
-                        _ResultRow(
-                          'Custo operacional',
-                          brl(quote.operationalCost),
-                        ),
-                        _ResultRow(
-                          'Distancia total',
-                          '${quote.totalDistanceKm.toStringAsFixed(0)} km',
-                        ),
-                        _ResultRow(
-                          'Custos variaveis',
-                          brl(quote.totalVariableCosts),
-                        ),
-                        _ResultRow('Custos fixos', brl(quote.totalFixedCosts)),
-                        _ResultRow('Seguro', brl(quote.insuranceValue)),
-                        _ResultRow('Ad valorem', brl(quote.adValoremValue)),
-                        _ResultRow('Lucro / margem', brl(quote.marginValue)),
-                        _ResultRow('ICMS', brl(quote.icmsValue)),
-                        _ResultRow('PIS', brl(quote.pisValue)),
-                        _ResultRow('COFINS', brl(quote.cofinsValue)),
-                        _ResultRow('Piso ANTT', brl(quote.minimumAnttValue)),
-                        const Divider(height: 28),
-                        Text(
-                          brl(quote.commercialValue),
-                          style: Theme.of(context).textTheme.displaySmall,
-                        ),
-                        _ResultRow(
-                          'Custo por km',
-                          '${brl(quote.costPerKm)} / km',
-                        ),
-                        _ResultRow(
-                          'Preco por km',
-                          '${brl(quote.minimumValuePerKm)} / km',
-                        ),
-                        const SizedBox(height: 8),
-                        _AnttBadge(isBelowAntt: quote.isBelowAntt),
-                        const SizedBox(height: 10),
+                        if (!resultReady) ...[
+                          _CalculationPendingCard(
+                            messages: validation?.messages,
+                            hasTried: validation != null,
+                          ),
+                          const SizedBox(height: 12),
+                        ],
+                        if (validation != null && !validation.isValid) ...[
+                          _ValidationSummary(messages: validation.messages),
+                          const SizedBox(height: 12),
+                        ],
+                        if (resultReady) ...[
+                          _ResultRow(
+                            'Porte operacional',
+                            quote.suggestedVehicle,
+                          ),
+                          _VehicleRecommendation(
+                            vehicle: quote.suggestedVehicle,
+                            bodyType: form.bodyType,
+                            axleCount: form.anttAxles,
+                            weightKg: input.totalWeightKg,
+                            volumeM3: input.totalVolumeM3,
+                          ),
+                          const SizedBox(height: 8),
+                          _ResultRow('Carroceria', form.bodyType),
+                          _ResultRow(
+                            'Validade',
+                            '${form.validityDays} dias corridos',
+                          ),
+                          _ResultRow(
+                            'Custo operacional',
+                            brl(quote.operationalCost),
+                          ),
+                          _ResultRow(
+                            'Km considerado no custo',
+                            '${quote.totalDistanceKm.toStringAsFixed(0)} km',
+                          ),
+                          if (quote.returnDistanceKm > 0)
+                            _ResultRow(
+                              'Retorno vazio',
+                              '${quote.returnDistanceKm.toStringAsFixed(0)} km',
+                            ),
+                          _ResultRow(
+                            'Custos variaveis',
+                            brl(quote.totalVariableCosts),
+                          ),
+                          _ResultRow(
+                            'Custos fixos',
+                            brl(quote.totalFixedCosts),
+                          ),
+                          _ResultRow('Seguro', brl(quote.insuranceValue)),
+                          _ResultRow('Ad valorem', brl(quote.adValoremValue)),
+                          _ResultRow('Lucro / margem', brl(quote.marginValue)),
+                          _ResultRow('ICMS', brl(quote.icmsValue)),
+                          _ResultRow('PIS', brl(quote.pisValue)),
+                          _ResultRow('COFINS', brl(quote.cofinsValue)),
+                          _ResultRow('Piso ANTT', brl(quote.minimumAnttValue)),
+                          const SizedBox(height: 8),
+                          _CalculationFormulaCard(quote: quote),
+                          const Divider(height: 28),
+                          Text(
+                            brl(quote.commercialValue),
+                            style: Theme.of(context).textTheme.displaySmall,
+                          ),
+                          _ResultRow(
+                            'Custo por km',
+                            '${brl(quote.costPerKm)} / km',
+                          ),
+                          _ResultRow(
+                            'Preco por km',
+                            '${brl(quote.minimumValuePerKm)} / km',
+                          ),
+                          const SizedBox(height: 8),
+                          _AnttBadge(isBelowAntt: quote.isBelowAntt),
+                          const SizedBox(height: 10),
+                        ],
                         OutlinedButton.icon(
                           onPressed: () => _openAntt(context),
                           icon: const Icon(Icons.open_in_new),
@@ -354,6 +505,9 @@ class _QuotePageState extends ConsumerState<QuotePage> {
                       ),
                       FilledButton.tonalIcon(
                         onPressed: () async {
+                          if (!_ensureReadyAndNotify(context, input, form)) {
+                            return;
+                          }
                           await _sendEmail(context, input, quote, form);
                         },
                         icon: const Icon(Icons.mail_outline),
@@ -361,6 +515,9 @@ class _QuotePageState extends ConsumerState<QuotePage> {
                       ),
                       FilledButton.tonalIcon(
                         onPressed: () async {
+                          if (!_ensureReadyAndNotify(context, input, form)) {
+                            return;
+                          }
                           await _sendWhatsApp(context, input, quote, form);
                         },
                         icon: const Icon(Icons.chat_outlined),
@@ -368,6 +525,9 @@ class _QuotePageState extends ConsumerState<QuotePage> {
                       ),
                       FilledButton.icon(
                         onPressed: () async {
+                          if (!_ensureReadyAndNotify(context, input, form)) {
+                            return;
+                          }
                           final pdf = await _buildPdf(input, quote, form);
                           await Printing.layoutPdf(
                             name: 'proposta-fretecerto.pdf',
@@ -384,6 +544,9 @@ class _QuotePageState extends ConsumerState<QuotePage> {
                       if (form.quoteType != 'Orcamento') ...[
                         FilledButton.tonalIcon(
                           onPressed: () async {
+                            if (!_ensureReadyAndNotify(context, input, form)) {
+                              return;
+                            }
                             final pdf = await _buildPdf(input, quote, form);
                             await SharePlus.instance.share(
                               ShareParams(
@@ -406,6 +569,9 @@ class _QuotePageState extends ConsumerState<QuotePage> {
                         ),
                         OutlinedButton.icon(
                           onPressed: () async {
+                            if (!_ensureReadyAndNotify(context, input, form)) {
+                              return;
+                            }
                             final csv = const QuoteExportService()
                                 .buildExcelCsv(
                                   input: input,
@@ -416,6 +582,8 @@ class _QuotePageState extends ConsumerState<QuotePage> {
                                   origin: form.origin,
                                   destination: form.destination,
                                   cargoType: form.cargoType,
+                                  bodyType: form.bodyType,
+                                  validityDays: form.validityDays,
                                 );
                             await SharePlus.instance.share(
                               ShareParams(
@@ -438,6 +606,9 @@ class _QuotePageState extends ConsumerState<QuotePage> {
                         ),
                         FilledButton.icon(
                           onPressed: () async {
+                            if (!_ensureReadyAndNotify(context, input, form)) {
+                              return;
+                            }
                             final pdf = await _buildContract(
                               input,
                               quote,
@@ -453,6 +624,9 @@ class _QuotePageState extends ConsumerState<QuotePage> {
                         ),
                         OutlinedButton.icon(
                           onPressed: () async {
+                            if (!_ensureReadyAndNotify(context, input, form)) {
+                              return;
+                            }
                             final pdf = await _buildContract(
                               input,
                               quote,
@@ -503,6 +677,7 @@ class _QuotePageState extends ConsumerState<QuotePage> {
     QuoteFormState form,
   ) async {
     if (_savingQuote) return;
+    if (!_ensureReadyAndNotify(context, input, form)) return;
     setState(() => _savingQuote = true);
     final createdAt = DateTime.now();
     final savedQuote = SavedQuote(
@@ -520,7 +695,8 @@ class _QuotePageState extends ConsumerState<QuotePage> {
       distanceKm: input.distanceKm,
       totalDistanceKm: quote.totalDistanceKm,
       suggestedVehicle: quote.suggestedVehicle,
-      bodyType: quote.bodyType,
+      bodyType: form.bodyType,
+      validityDays: form.validityDays,
       commercialValue: quote.commercialValue,
       operationalCost: quote.operationalCost,
       minimumAnttValue: quote.minimumAnttValue,
@@ -545,6 +721,73 @@ class _QuotePageState extends ConsumerState<QuotePage> {
     );
   }
 
+  void _calculateQuote(
+    BuildContext context,
+    QuoteInput input,
+    QuoteFormState form,
+  ) {
+    final validation = _validate(input, form);
+    setState(() {
+      _lastValidation = validation;
+      _hasCalculated = validation.isValid;
+    });
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          validation.isValid
+              ? 'Cotacao calculada. Confira o valor e a composicao.'
+              : validation.messages.first,
+        ),
+      ),
+    );
+  }
+
+  bool _validateAndNotify(
+    BuildContext context,
+    QuoteInput input,
+    QuoteFormState form,
+  ) {
+    final validation = _validate(input, form);
+    setState(() => _lastValidation = validation);
+    if (validation.isValid) return true;
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(SnackBar(content: Text(validation.messages.first)));
+    return false;
+  }
+
+  bool _ensureReadyAndNotify(
+    BuildContext context,
+    QuoteInput input,
+    QuoteFormState form,
+  ) {
+    if (!_validateAndNotify(context, input, form)) return false;
+    if (_hasCalculated) return true;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        const SnackBar(
+          content: Text('Clique em Calcular cotacao antes de continuar.'),
+        ),
+      );
+    return false;
+  }
+
+  static QuoteValidationResult _validate(
+    QuoteInput input,
+    QuoteFormState form,
+  ) {
+    return const QuoteValidator().validate(
+      input: input,
+      origin: form.origin,
+      destination: form.destination,
+      cargoType: form.cargoType,
+      bodyType: form.bodyType,
+    );
+  }
+
   static Future<Uint8List> _buildPdf(
     QuoteInput input,
     FreightQuote quote,
@@ -559,6 +802,8 @@ class _QuotePageState extends ConsumerState<QuotePage> {
       origin: form.origin,
       destination: form.destination,
       cargoType: form.cargoType,
+      bodyType: form.bodyType,
+      validityDays: form.validityDays,
       anttCargoType: form.anttCargoType,
       anttAxles: form.anttAxles,
       isDieselVehicle: form.isDieselVehicle,
@@ -584,6 +829,8 @@ class _QuotePageState extends ConsumerState<QuotePage> {
       origin: form.origin,
       destination: form.destination,
       cargoType: form.cargoType,
+      bodyType: form.bodyType,
+      validityDays: form.validityDays,
       anttCargoType: form.anttCargoType,
       anttAxles: form.anttAxles,
       isDieselVehicle: form.isDieselVehicle,
@@ -607,6 +854,11 @@ class _QuotePageState extends ConsumerState<QuotePage> {
         ),
       );
     }
+  }
+
+  static void _clearForm(WidgetRef ref, String quoteType) {
+    ref.read(quoteFormProvider.notifier).reset(quoteType: quoteType);
+    ref.read(quoteInputProvider.notifier).reset();
   }
 
   static Future<void> _sendEmail(
@@ -661,15 +913,15 @@ Carga: ${form.cargoType}
 Peso: ${input.totalWeightKg.toStringAsFixed(0)} kg
 Cubagem: ${input.totalVolumeM3.toStringAsFixed(1)} m3
 Porte operacional: ${quote.suggestedVehicle}
-Carroceria: ${quote.bodyType}
+Carroceria: ${form.bodyType}
 Tipo ANTT: ${form.anttCargoType}
 Eixos ANTT: ${form.anttAxles}
-Distancia total estimada: ${quote.totalDistanceKm.toStringAsFixed(0)} km
+Km considerado no custo: ${quote.totalDistanceKm.toStringAsFixed(0)} km
 Piso ANTT informado: ${brl(quote.minimumAnttValue)}
 Valor comercial: ${brl(quote.commercialValue)}
 Status: ${quote.isBelowAntt ? 'abaixo do piso informado' : 'acima do piso informado'}
 
-Validade: 7 dias corridos, sujeito a confirmacao cadastral, fiscal e operacional.
+Validade: ${form.validityDays} dias corridos, sujeito a confirmacao cadastral, fiscal e operacional.
 ''';
   }
 
@@ -678,10 +930,74 @@ Validade: 7 dias corridos, sujeito a confirmacao cadastral, fiscal e operacional
     return '$prefix-fretecerto-$stamp.$extension';
   }
 
-  static void _update(
+  void _markDirty() {
+    if (!_hasCalculated && _lastValidation == null) return;
+    setState(() {
+      _hasCalculated = false;
+      _lastValidation = null;
+    });
+  }
+
+  void _scheduleAutoRouteLookup(LocationDistanceService service) {
+    _routeLookupTimer?.cancel();
+    final form = ref.read(quoteFormProvider);
+    final origin = form.origin.trim();
+    final destination = form.destination.trim();
+    if (origin.length < 3 || destination.length < 3) {
+      if (_autoRouteSearching || _routeLookupMessage != null) {
+        setState(() {
+          _autoRouteSearching = false;
+          _routeLookupMessage = null;
+        });
+      }
+      return;
+    }
+
+    setState(() {
+      _autoRouteSearching = true;
+      _routeLookupMessage = 'Buscando distancia automaticamente...';
+    });
+
+    _routeLookupTimer = Timer(const Duration(milliseconds: 700), () async {
+      final currentForm = ref.read(quoteFormProvider);
+      final currentInput = ref.read(quoteInputProvider);
+      final resolved = await service.resolveRoadDistance(
+        currentForm.origin,
+        currentForm.destination,
+      );
+      if (!mounted) return;
+      if (resolved == null) {
+        setState(() {
+          _autoRouteSearching = false;
+          _routeLookupMessage =
+              'Nao achei essa rota automaticamente. Informe o km manualmente.';
+        });
+        return;
+      }
+      _update(
+        ref,
+        currentInput,
+        distanceKm: resolved.distanceKm,
+        returnDistanceKm: currentForm.hasEmptyReturn
+            ? resolved.distanceKm
+            : currentInput.returnDistanceKm,
+      );
+      final source = switch (resolved.source) {
+        RouteDistanceSource.openRouteService => 'rota real',
+        RouteDistanceSource.offlineEstimate => 'estimativa local',
+      };
+      setState(() {
+        _autoRouteSearching = false;
+        _routeLookupMessage = 'Distancia aplicada automaticamente por $source.';
+      });
+    });
+  }
+
+  void _update(
     WidgetRef ref,
     QuoteInput input, {
     double? distanceKm,
+    double? returnDistanceKm,
     double? totalWeightKg,
     double? totalVolumeM3,
     double? invoiceValue,
@@ -693,11 +1009,13 @@ Validade: 7 dias corridos, sujeito a confirmacao cadastral, fiscal e operacional
     double? otherVariableCosts,
     double? monthlyTrips,
   }) {
+    _markDirty();
     ref
         .read(quoteInputProvider.notifier)
         .replace(
           QuoteInput(
             distanceKm: distanceKm ?? input.distanceKm,
+            returnDistanceKm: returnDistanceKm ?? input.returnDistanceKm,
             totalWeightKg: totalWeightKg ?? input.totalWeightKg,
             totalVolumeM3: totalVolumeM3 ?? input.totalVolumeM3,
             invoiceValue: invoiceValue ?? input.invoiceValue,
@@ -814,7 +1132,7 @@ class _CommercialHero extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         Text(
-          '$suggestedVehicle | ${totalDistanceKm.toStringAsFixed(0)} km total',
+          '$suggestedVehicle | ${totalDistanceKm.toStringAsFixed(0)} km calculo',
           style: const TextStyle(color: Colors.white),
         ),
       ],
@@ -901,14 +1219,18 @@ class _ModeGuide extends StatelessWidget {
 
 class _QuickActionBar extends StatelessWidget {
   const _QuickActionBar({
+    required this.onCalculate,
     required this.onAntt,
     required this.onEmail,
     required this.onWhatsApp,
+    required this.onClear,
   });
 
+  final VoidCallback onCalculate;
   final VoidCallback onAntt;
   final VoidCallback onEmail;
   final VoidCallback onWhatsApp;
+  final VoidCallback onClear;
 
   @override
   Widget build(BuildContext context) {
@@ -920,6 +1242,11 @@ class _QuickActionBar extends StatelessWidget {
           runSpacing: 10,
           crossAxisAlignment: WrapCrossAlignment.center,
           children: [
+            FilledButton.icon(
+              onPressed: onCalculate,
+              icon: const Icon(Icons.calculate_outlined),
+              label: const Text('Calcular cotacao'),
+            ),
             OutlinedButton.icon(
               onPressed: onAntt,
               icon: const Icon(Icons.open_in_new),
@@ -934,6 +1261,11 @@ class _QuickActionBar extends StatelessWidget {
               onPressed: onWhatsApp,
               icon: const Icon(Icons.chat_outlined),
               label: const Text('WhatsApp rapido'),
+            ),
+            OutlinedButton.icon(
+              onPressed: onClear,
+              icon: const Icon(Icons.add_circle_outline),
+              label: const Text('Nova cotacao'),
             ),
           ],
         ),
@@ -960,11 +1292,89 @@ class _HeroChip extends StatelessWidget {
   }
 }
 
+class _WorkflowHint extends StatelessWidget {
+  const _WorkflowHint();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF3F7F6),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFCCE3DF)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.assignment_outlined, color: Color(0xFF0E6F68)),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Informe cliente, origem, destino, peso, carga, carroceria, valor da NF, piso ANTT e validade antes de enviar.',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                fontWeight: FontWeight.w700,
+                color: const Color(0xFF315654),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _BodyTypeSelector extends StatelessWidget {
+  const _BodyTypeSelector({required this.value, required this.onChanged});
+
+  static const _options = [
+    'Aberta',
+    'Bau',
+    'Sider',
+    'Grade baixa',
+    'Graneleira',
+    'Tanque',
+    'Frigorifica',
+    'Prancha',
+    'Container',
+    'Definir na operacao',
+  ];
+
+  final String value;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final selected = _options.contains(value) ? value : _options.first;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: DropdownButtonFormField<String>(
+        initialValue: selected,
+        isExpanded: true,
+        decoration: const InputDecoration(
+          labelText: 'Carroceria solicitada',
+          prefixIcon: Icon(Icons.local_shipping_outlined),
+        ),
+        items: [
+          for (final option in _options)
+            DropdownMenuItem(value: option, child: Text(option)),
+        ],
+        onChanged: (value) {
+          if (value != null) onChanged(value);
+        },
+      ),
+    );
+  }
+}
+
 class _RouteMapPanel extends StatelessWidget {
   const _RouteMapPanel({
     required this.origin,
     required this.destination,
     required this.distanceKm,
+    required this.searching,
+    required this.message,
     required this.service,
     required this.onDistanceResolved,
   });
@@ -972,6 +1382,8 @@ class _RouteMapPanel extends StatelessWidget {
   final String origin;
   final String destination;
   final double distanceKm;
+  final bool searching;
+  final String? message;
   final LocationDistanceService service;
   final ValueChanged<double> onDistanceResolved;
 
@@ -1049,7 +1461,7 @@ class _RouteMapPanel extends StatelessWidget {
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
                         content: Text(
-                          'Nao encontrei essa rota na base local. Selecione origem e destino da lista ou informe a distancia manualmente.',
+                          'Rota automatica indisponivel para essas cidades. A cotacao continua liberada: informe a distancia manualmente.',
                         ),
                       ),
                     );
@@ -1058,7 +1470,7 @@ class _RouteMapPanel extends StatelessWidget {
                   onDistanceResolved(resolved.distanceKm);
                   if (!context.mounted) return;
                   final source = switch (resolved.source) {
-                    RouteDistanceSource.googleMaps => 'Google Maps',
+                    RouteDistanceSource.openRouteService => 'OpenRouteService',
                     RouteDistanceSource.offlineEstimate => 'estimativa local',
                   };
                   final duration = resolved.durationText == null
@@ -1089,6 +1501,35 @@ class _RouteMapPanel extends StatelessWidget {
               ),
             ],
           ),
+          if (message != null) ...[
+            const SizedBox(height: 10),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (searching)
+                  const SizedBox.square(
+                    dimension: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                else
+                  const Icon(
+                    Icons.info_outline,
+                    size: 18,
+                    color: Color(0xFF0E6F68),
+                  ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    message!,
+                    style: const TextStyle(
+                      color: Color(0xFF315654),
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
         ],
       ),
     );
@@ -1158,18 +1599,20 @@ class _VehicleRecommendation extends StatelessWidget {
   const _VehicleRecommendation({
     required this.vehicle,
     required this.bodyType,
+    required this.axleCount,
     required this.weightKg,
     required this.volumeM3,
   });
 
   final String vehicle;
   final String bodyType;
+  final int axleCount;
   final double weightKg;
   final double volumeM3;
 
   @override
   Widget build(BuildContext context) {
-    final axleCount = _axleCountFor(vehicle);
+    final visibleAxles = axleCount.clamp(2, 9);
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(14),
@@ -1211,7 +1654,7 @@ class _VehicleRecommendation extends StatelessWidget {
           SizedBox(
             height: 72,
             child: CustomPaint(
-              painter: _TruckPainter(axleCount: axleCount),
+              painter: _TruckPainter(axleCount: visibleAxles),
               child: const SizedBox.expand(),
             ),
           ),
@@ -1221,7 +1664,7 @@ class _VehicleRecommendation extends StatelessWidget {
             runSpacing: 8,
             children: [
               Chip(label: Text(vehicle)),
-              Chip(label: Text('$axleCount eixos')),
+              Chip(label: Text('$visibleAxles eixos ANTT')),
               Chip(label: Text('Carroceria: $bodyType')),
               Chip(label: Text('${weightKg.toStringAsFixed(0)} kg')),
               Chip(label: Text('${volumeM3.toStringAsFixed(0)} m3')),
@@ -1231,11 +1674,136 @@ class _VehicleRecommendation extends StatelessWidget {
       ),
     );
   }
+}
 
-  static int _axleCountFor(String vehicle) {
-    if (vehicle.contains('3 eixos')) return 3;
-    if (vehicle.contains('5+ eixos')) return 5;
-    return 2;
+class _ValidationSummary extends StatelessWidget {
+  const _ValidationSummary({required this.messages});
+
+  final List<String> messages;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF3E0),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFFFCC80)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.warning_amber_outlined,
+                color: Color(0xFFE65100),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Antes de enviar, corrija a cotacao',
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w800,
+                    color: const Color(0xFF713F12),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          for (final message in messages.take(5))
+            Padding(
+              padding: const EdgeInsets.only(top: 3),
+              child: Text(
+                '- $message',
+                style: const TextStyle(color: Color(0xFF713F12)),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CalculationFormulaCard extends StatelessWidget {
+  const _CalculationFormulaCard({required this.quote});
+
+  final FreightQuote quote;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Como o valor foi formado',
+            style: Theme.of(
+              context,
+            ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 8),
+          _ResultRow('Base operacional', brl(quote.operationalCost)),
+          _ResultRow(
+            'Seguro + ad valorem + margem',
+            brl(
+              quote.insuranceValue + quote.adValoremValue + quote.marginValue,
+            ),
+          ),
+          _ResultRow('Impostos por dentro', brl(quote.taxValue)),
+          if (quote.minimumAnttValue > 0)
+            _ResultRow('Piso ANTT aplicado', quote.isBelowAntt ? 'Sim' : 'Nao'),
+        ],
+      ),
+    );
+  }
+}
+
+class _CalculationPendingCard extends StatelessWidget {
+  const _CalculationPendingCard({required this.hasTried, this.messages});
+
+  final bool hasTried;
+  final List<String>? messages;
+
+  @override
+  Widget build(BuildContext context) {
+    final firstMessage = messages?.isNotEmpty == true ? messages!.first : null;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF3F7F6),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFCCE3DF)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.calculate_outlined, color: Color(0xFF0E6F68)),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              hasTried && firstMessage != null
+                  ? firstMessage
+                  : 'Preencha os dados principais e clique em Calcular cotacao para liberar o resultado.',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                fontWeight: FontWeight.w700,
+                color: const Color(0xFF315654),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -1394,18 +1962,18 @@ class _AnttComplianceForm extends StatelessWidget {
           onChanged: (value) =>
               onChanged(form.copyWith(isHighPerformance: value)),
         ),
-        _AnttSwitch(
-          title: 'Retorno vazio',
-          value: form.hasEmptyReturn,
-          onChanged: (value) => onChanged(form.copyWith(hasEmptyReturn: value)),
-        ),
         const SizedBox(height: 8),
         _ResultRow(
-          'Distancia ida',
+          'Distancia da rota',
           '${quote.outboundDistanceKm.toStringAsFixed(0)} km',
         ),
+        if (quote.returnDistanceKm > 0)
+          _ResultRow(
+            'Retorno vazio',
+            '${quote.returnDistanceKm.toStringAsFixed(0)} km',
+          ),
         _ResultRow(
-          'Distancia total',
+          'Km considerado no custo',
           '${quote.totalDistanceKm.toStringAsFixed(0)} km',
         ),
         _ResultRow('Valor da cotacao', brl(quote.commercialValue)),
@@ -1689,12 +2257,14 @@ class _LocalityField extends StatefulWidget {
     required this.label,
     required this.value,
     required this.service,
+    required this.ibgeMunicipalities,
     required this.onChanged,
   });
 
   final String label;
   final String value;
   final LocationDistanceService service;
+  final List<IbgeMunicipality> ibgeMunicipalities;
   final ValueChanged<String> onChanged;
 
   @override
@@ -1713,6 +2283,14 @@ class _LocalityFieldState extends State<_LocalityField> {
   }
 
   @override
+  void didUpdateWidget(covariant _LocalityField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.value != widget.value && _controller.text != widget.value) {
+      _controller.text = widget.value;
+    }
+  }
+
+  @override
   void dispose() {
     _controller.dispose();
     _focusNode.dispose();
@@ -1723,16 +2301,16 @@ class _LocalityFieldState extends State<_LocalityField> {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
-      child: RawAutocomplete<Locality>(
+      child: RawAutocomplete<_LocalityOption>(
         textEditingController: _controller,
         focusNode: _focusNode,
         displayStringForOption: (option) => option.label,
         optionsBuilder: (textEditingValue) {
-          return widget.service.search(textEditingValue.text);
+          return _options(textEditingValue.text);
         },
-        onSelected: (locality) {
-          _controller.text = locality.label;
-          widget.onChanged(locality.label);
+        onSelected: (option) {
+          _controller.text = option.label;
+          widget.onChanged(option.label);
         },
         fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
           return TextField(
@@ -1740,6 +2318,7 @@ class _LocalityFieldState extends State<_LocalityField> {
             focusNode: focusNode,
             decoration: InputDecoration(
               labelText: widget.label,
+              helperText: 'Digite livremente ou selecione uma sugestao.',
               prefixIcon: const Icon(Icons.location_on_outlined),
               suffixIcon: IconButton(
                 tooltip: 'Usar localidade',
@@ -1768,8 +2347,13 @@ class _LocalityFieldState extends State<_LocalityField> {
                     final option = options.elementAt(index);
                     return ListTile(
                       dense: true,
-                      leading: const Icon(Icons.location_city_outlined),
+                      leading: Icon(
+                        option.isIbge
+                            ? Icons.public_outlined
+                            : Icons.location_city_outlined,
+                      ),
                       title: Text(option.label),
+                      subtitle: Text(option.isIbge ? 'IBGE' : 'Base local'),
                       onTap: () => onSelected(option),
                     );
                   },
@@ -1781,6 +2365,59 @@ class _LocalityFieldState extends State<_LocalityField> {
       ),
     );
   }
+
+  Iterable<_LocalityOption> _options(String query) {
+    final normalized = _normalizeSearch(query);
+    if (normalized.length < 2) return const [];
+    final localOptions = widget.service
+        .search(query)
+        .map((locality) => _LocalityOption(locality.label, isIbge: false));
+    final ibgeOptions = widget.ibgeMunicipalities
+        .where((municipality) {
+          final label = _normalizeSearch(municipality.label);
+          return label.contains(normalized);
+        })
+        .take(12)
+        .map(
+          (municipality) => _LocalityOption(municipality.label, isIbge: true),
+        );
+
+    final seen = <String>{};
+    return [...localOptions, ...ibgeOptions]
+        .where((option) {
+          final key = _normalizeSearch(option.label);
+          if (seen.contains(key)) return false;
+          seen.add(key);
+          return true;
+        })
+        .take(12);
+  }
+}
+
+class _LocalityOption {
+  const _LocalityOption(this.label, {required this.isIbge});
+
+  final String label;
+  final bool isIbge;
+}
+
+String _normalizeSearch(String value) {
+  return value
+      .toLowerCase()
+      .replaceAll('á', 'a')
+      .replaceAll('à', 'a')
+      .replaceAll('ã', 'a')
+      .replaceAll('â', 'a')
+      .replaceAll('é', 'e')
+      .replaceAll('ê', 'e')
+      .replaceAll('í', 'i')
+      .replaceAll('ó', 'o')
+      .replaceAll('õ', 'o')
+      .replaceAll('ô', 'o')
+      .replaceAll('ú', 'u')
+      .replaceAll('ü', 'u')
+      .replaceAll('ç', 'c')
+      .trim();
 }
 
 class _MoneyField extends StatefulWidget {
@@ -1808,6 +2445,15 @@ class _MoneyFieldState extends State<_MoneyField> {
   }
 
   @override
+  void didUpdateWidget(covariant _MoneyField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final text = widget.value.toStringAsFixed(2);
+    if (oldWidget.value != widget.value && _controller.text != text) {
+      _controller.text = text;
+    }
+  }
+
+  @override
   void dispose() {
     _controller.dispose();
     super.dispose();
@@ -1825,7 +2471,7 @@ class _MoneyFieldState extends State<_MoneyField> {
           prefixText: 'R\$ ',
         ),
         onChanged: (value) {
-          final parsed = double.tryParse(value.replaceAll(',', '.'));
+          final parsed = _parseCommercialNumber(value);
           if (parsed != null) widget.onChanged(parsed);
         },
       ),
@@ -1858,6 +2504,15 @@ class _PercentFieldState extends State<_PercentField> {
   }
 
   @override
+  void didUpdateWidget(covariant _PercentField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final text = widget.value.toStringAsFixed(2);
+    if (oldWidget.value != widget.value && _controller.text != text) {
+      _controller.text = text;
+    }
+  }
+
+  @override
   void dispose() {
     _controller.dispose();
     super.dispose();
@@ -1872,7 +2527,7 @@ class _PercentFieldState extends State<_PercentField> {
         keyboardType: const TextInputType.numberWithOptions(decimal: true),
         decoration: InputDecoration(labelText: widget.label, suffixText: '%'),
         onChanged: (value) {
-          final parsed = double.tryParse(value.replaceAll(',', '.'));
+          final parsed = _parseCommercialNumber(value);
           if (parsed != null) widget.onChanged(parsed);
         },
       ),
@@ -1907,6 +2562,15 @@ class _NumberFieldState extends State<_NumberField> {
   }
 
   @override
+  void didUpdateWidget(covariant _NumberField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final text = widget.value.toStringAsFixed(0);
+    if (oldWidget.value != widget.value && _controller.text != text) {
+      _controller.text = text;
+    }
+  }
+
+  @override
   void dispose() {
     _controller.dispose();
     super.dispose();
@@ -1924,12 +2588,45 @@ class _NumberFieldState extends State<_NumberField> {
           suffixText: widget.suffix,
         ),
         onChanged: (value) {
-          final parsed = double.tryParse(value.replaceAll(',', '.'));
+          final parsed = _parseCommercialNumber(value);
           if (parsed != null) widget.onChanged(parsed);
         },
       ),
     );
   }
+}
+
+double? _parseCommercialNumber(String value) {
+  final text = value.trim().replaceAll(RegExp(r'[^0-9,.-]'), '');
+  if (text.isEmpty) return null;
+
+  final hasComma = text.contains(',');
+  final hasDot = text.contains('.');
+  if (hasComma && hasDot) {
+    final commaIndex = text.lastIndexOf(',');
+    final dotIndex = text.lastIndexOf('.');
+    if (commaIndex > dotIndex) {
+      return double.tryParse(text.replaceAll('.', '').replaceAll(',', '.'));
+    }
+    return double.tryParse(text.replaceAll(',', ''));
+  }
+
+  if (hasComma) {
+    return double.tryParse(text.replaceAll('.', '').replaceAll(',', '.'));
+  }
+
+  if (hasDot) {
+    final parts = text.split('.');
+    final looksLikeThousands =
+        parts.length > 1 &&
+        parts.skip(1).every((part) => part.length == 3) &&
+        parts.first.length <= 3;
+    if (looksLikeThousands) {
+      return double.tryParse(parts.join());
+    }
+  }
+
+  return double.tryParse(text);
 }
 
 class _ResultRow extends StatelessWidget {

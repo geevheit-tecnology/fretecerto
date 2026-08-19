@@ -66,6 +66,8 @@ class FreightQuote {
   final bool isBelowAntt;
 
   double get taxValue => icmsValue + pisValue + cofinsValue;
-  double get minimumValuePerKm => commercialValue / totalDistanceKm;
-  double get costPerKm => operationalCost / totalDistanceKm;
+  double get minimumValuePerKm =>
+      totalDistanceKm <= 0 ? 0 : commercialValue / totalDistanceKm;
+  double get costPerKm =>
+      totalDistanceKm <= 0 ? 0 : operationalCost / totalDistanceKm;
 }

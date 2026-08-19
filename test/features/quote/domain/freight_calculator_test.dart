@@ -22,19 +22,40 @@ void main() {
 
     expect(quote.suggestedVehicle, 'VUC - 2 eixos');
     expect(quote.bodyType, 'Definir conforme carga');
-    expect(quote.totalDistanceKm, 856);
-    expect(quote.fuelCost, closeTo(2088.64, 0.01));
-    expect(quote.arlaCost, closeTo(77.04, 0.01));
-    expect(quote.totalVariableCosts, closeTo(3810.28, 0.01));
+    expect(quote.totalDistanceKm, 428);
+    expect(quote.returnDistanceKm, 0);
+    expect(quote.fuelCost, closeTo(1044.32, 0.01));
+    expect(quote.arlaCost, closeTo(38.52, 0.01));
+    expect(quote.totalVariableCosts, closeTo(2187.64, 0.01));
     expect(quote.totalFixedCosts, closeTo(1285, 0.01));
-    expect(quote.operationalCost, closeTo(5095.28, 0.01));
-    expect(quote.icmsValue, closeTo(776.19, 0.01));
-    expect(quote.pisValue, closeTo(106.73, 0.01));
-    expect(quote.cofinsValue, closeTo(491.59, 0.01));
+    expect(quote.operationalCost, closeTo(3472.64, 0.01));
+    expect(quote.icmsValue, closeTo(683.98, 0.01));
+    expect(quote.pisValue, closeTo(94.05, 0.01));
+    expect(quote.cofinsValue, closeTo(433.19, 0.01));
     expect(quote.adValoremValue, closeTo(105, 0.01));
-    expect(quote.marginValue, closeTo(1120.96, 0.01));
-    expect(quote.commercialValue, closeTo(7842.74, 0.01));
-    expect(quote.minimumValuePerKm, closeTo(9.16, 0.01));
+    expect(quote.marginValue, closeTo(763.98, 0.01));
+    expect(quote.commercialValue, closeTo(5699.84, 0.01));
+    expect(quote.minimumValuePerKm, closeTo(13.32, 0.01));
     expect(quote.isBelowAntt, isFalse);
+  });
+
+  test('considera retorno somente quando informado', () {
+    const calculator = CommercialFreightCalculator();
+
+    final quote = calculator.calculate(
+      const QuoteInput(
+        distanceKm: 3000,
+        returnDistanceKm: 3000,
+        totalWeightKg: 25000,
+        totalVolumeM3: 1,
+        invoiceValue: 200000,
+        marginPercent: 20,
+      ),
+    );
+
+    expect(quote.outboundDistanceKm, 3000);
+    expect(quote.returnDistanceKm, 3000);
+    expect(quote.totalDistanceKm, 6000);
+    expect(quote.suggestedVehicle, 'Carreta - 5+ eixos');
   });
 }

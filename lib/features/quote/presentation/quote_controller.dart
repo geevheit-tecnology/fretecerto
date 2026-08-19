@@ -10,8 +10,18 @@ final freightCalculatorProvider = Provider<FreightCalculator>(
 );
 
 final locationDistanceServiceProvider = Provider<LocationDistanceService>(
-  (_) => GoogleMapsDistanceService(),
+  (_) => OpenRouteServiceDistanceService(),
 );
+
+final ibgeLocalityServiceProvider = Provider<IbgeLocalityService>(
+  (_) => IbgeLocalityService(),
+);
+
+final ibgeMunicipalitiesProvider = FutureProvider<List<IbgeMunicipality>>((
+  ref,
+) {
+  return ref.watch(ibgeLocalityServiceProvider).municipalities();
+});
 
 final quoteInputProvider = NotifierProvider<QuoteInputNotifier, QuoteInput>(
   QuoteInputNotifier.new,
@@ -24,11 +34,13 @@ final quoteFormProvider = NotifierProvider<QuoteFormNotifier, QuoteFormState>(
 class QuoteFormState {
   const QuoteFormState({
     this.quoteType = 'Orcamento',
-    this.customerName = 'Forte Expressa',
+    this.customerName = '',
     this.sellerName = 'Comercial interno',
-    this.origin = 'Guarulhos, SP',
-    this.destination = 'Contagem, MG',
-    this.cargoType = 'Carga seca paletizada',
+    this.origin = '',
+    this.destination = '',
+    this.cargoType = '',
+    this.bodyType = 'Aberta',
+    this.validityDays = 7,
     this.anttCargoType = 'Carga geral',
     this.anttAxles = 2,
     this.isDieselVehicle = true,
@@ -45,6 +57,8 @@ class QuoteFormState {
   final String origin;
   final String destination;
   final String cargoType;
+  final String bodyType;
+  final int validityDays;
   final String anttCargoType;
   final int anttAxles;
   final bool isDieselVehicle;
@@ -61,6 +75,8 @@ class QuoteFormState {
     String? origin,
     String? destination,
     String? cargoType,
+    String? bodyType,
+    int? validityDays,
     String? anttCargoType,
     int? anttAxles,
     bool? isDieselVehicle,
@@ -77,6 +93,8 @@ class QuoteFormState {
       origin: origin ?? this.origin,
       destination: destination ?? this.destination,
       cargoType: cargoType ?? this.cargoType,
+      bodyType: bodyType ?? this.bodyType,
+      validityDays: validityDays ?? this.validityDays,
       anttCargoType: anttCargoType ?? this.anttCargoType,
       anttAxles: anttAxles ?? this.anttAxles,
       isDieselVehicle: isDieselVehicle ?? this.isDieselVehicle,
@@ -96,26 +114,40 @@ class QuoteFormNotifier extends Notifier<QuoteFormState> {
   void update(QuoteFormState state) {
     this.state = state;
   }
+
+  void reset({String quoteType = 'Orcamento'}) {
+    state = QuoteFormState(quoteType: quoteType);
+  }
 }
 
 class QuoteInputNotifier extends Notifier<QuoteInput> {
   @override
   QuoteInput build() {
     return const QuoteInput(
-      distanceKm: 428,
-      totalWeightKg: 2400,
-      totalVolumeM3: 18,
-      invoiceValue: 42000,
-      marginPercent: 22,
-      toll: 390,
-      loadingFee: 180,
-      unloadingFee: 220,
-      minimumAntt: 5200,
+      distanceKm: 0,
+      totalWeightKg: 0,
+      totalVolumeM3: 0,
+      invoiceValue: 0,
+      marginPercent: 20,
     );
   }
 
   void replace(QuoteInput input) {
     state = input;
+  }
+
+  void reset() {
+    state = state.copyWith(
+      distanceKm: 0,
+      totalWeightKg: 0,
+      totalVolumeM3: 0,
+      invoiceValue: 0,
+      returnDistanceKm: 0,
+      toll: 0,
+      loadingFee: 0,
+      unloadingFee: 0,
+      minimumAntt: 0,
+    );
   }
 }
 

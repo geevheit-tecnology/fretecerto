@@ -123,6 +123,13 @@ class SettingsPage extends ConsumerWidget {
                         onChanged: (value) =>
                             update(input.copyWith(trackingFee: value)),
                       ),
+                      _ParameterField(
+                        label: 'Outros variaveis padrao',
+                        suffix: 'R\$',
+                        value: input.otherVariableCosts,
+                        onChanged: (value) =>
+                            update(input.copyWith(otherVariableCosts: value)),
+                      ),
                     ],
                   ),
                   _ConfigCard(
@@ -174,6 +181,13 @@ class SettingsPage extends ConsumerWidget {
                         onChanged: (value) => update(
                           input.copyWith(otherFixedCostsPerTrip: value),
                         ),
+                      ),
+                      _ParameterField(
+                        label: 'Viagens por mes',
+                        suffix: 'viagens',
+                        value: input.monthlyTrips,
+                        onChanged: (value) =>
+                            update(input.copyWith(monthlyTrips: value)),
                       ),
                     ],
                   ),
@@ -384,12 +398,45 @@ class _ParameterFieldState extends State<_ParameterField> {
           suffixIcon: const Icon(Icons.edit_outlined),
         ),
         onChanged: (value) {
-          final parsed = double.tryParse(value.replaceAll(',', '.'));
+          final parsed = _parseCommercialNumber(value);
           if (parsed != null) widget.onChanged(parsed);
         },
       ),
     );
   }
+}
+
+double? _parseCommercialNumber(String value) {
+  final text = value.trim().replaceAll(RegExp(r'[^0-9,.-]'), '');
+  if (text.isEmpty) return null;
+
+  final hasComma = text.contains(',');
+  final hasDot = text.contains('.');
+  if (hasComma && hasDot) {
+    final commaIndex = text.lastIndexOf(',');
+    final dotIndex = text.lastIndexOf('.');
+    if (commaIndex > dotIndex) {
+      return double.tryParse(text.replaceAll('.', '').replaceAll(',', '.'));
+    }
+    return double.tryParse(text.replaceAll(',', ''));
+  }
+
+  if (hasComma) {
+    return double.tryParse(text.replaceAll('.', '').replaceAll(',', '.'));
+  }
+
+  if (hasDot) {
+    final parts = text.split('.');
+    final looksLikeThousands =
+        parts.length > 1 &&
+        parts.skip(1).every((part) => part.length == 3) &&
+        parts.first.length <= 3;
+    if (looksLikeThousands) {
+      return double.tryParse(parts.join());
+    }
+  }
+
+  return double.tryParse(text);
 }
 
 class _CalculationPolicyCard extends StatelessWidget {

@@ -17,7 +17,12 @@ class QuoteExportService {
     required String origin,
     required String destination,
     required String cargoType,
+    String? bodyType,
+    int validityDays = 7,
   }) {
+    final resolvedBodyType = bodyType?.trim().isNotEmpty == true
+        ? bodyType!.trim()
+        : quote.bodyType;
     final rows = [
       ['Campo', 'Valor'],
       ['Tipo', quoteType],
@@ -30,9 +35,11 @@ class QuoteExportService {
       ['Cubagem m3', input.totalVolumeM3.toStringAsFixed(1)],
       ['Valor NF', brl(input.invoiceValue)],
       ['Porte operacional', quote.suggestedVehicle],
-      ['Carroceria', quote.bodyType],
-      ['Distancia ida km', quote.outboundDistanceKm.toStringAsFixed(0)],
-      ['Distancia total km', quote.totalDistanceKm.toStringAsFixed(0)],
+      ['Carroceria', resolvedBodyType],
+      ['Validade dias', validityDays.toString()],
+      ['Distancia da rota km', quote.outboundDistanceKm.toStringAsFixed(0)],
+      ['Retorno vazio km', quote.returnDistanceKm.toStringAsFixed(0)],
+      ['Km considerado no custo', quote.totalDistanceKm.toStringAsFixed(0)],
       ['Custo operacional', brl(quote.operationalCost)],
       ['Custos variaveis', brl(quote.totalVariableCosts)],
       ['Custos fixos', brl(quote.totalFixedCosts)],

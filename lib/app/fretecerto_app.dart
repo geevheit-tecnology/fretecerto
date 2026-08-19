@@ -111,7 +111,7 @@ class AppShell extends StatelessWidget {
                   NavigationDestination(
                     icon: Icon(Icons.request_quote_outlined),
                     selectedIcon: Icon(Icons.request_quote),
-                    label: 'Cotacao',
+                    label: 'Nova',
                   ),
                   NavigationDestination(
                     icon: Icon(Icons.badge_outlined),

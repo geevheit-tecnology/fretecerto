@@ -5,6 +5,7 @@ class QuoteInput {
     required this.totalVolumeM3,
     required this.invoiceValue,
     required this.marginPercent,
+    this.returnDistanceKm = 0,
     this.toll = 0,
     this.loadingFee = 0,
     this.unloadingFee = 0,
@@ -36,6 +37,7 @@ class QuoteInput {
   final double totalVolumeM3;
   final double invoiceValue;
   final double marginPercent;
+  final double returnDistanceKm;
   final double toll;
   final double loadingFee;
   final double unloadingFee;
@@ -67,6 +69,7 @@ class QuoteInput {
     double? totalVolumeM3,
     double? invoiceValue,
     double? marginPercent,
+    double? returnDistanceKm,
     double? toll,
     double? loadingFee,
     double? unloadingFee,
@@ -98,6 +101,7 @@ class QuoteInput {
       totalVolumeM3: totalVolumeM3 ?? this.totalVolumeM3,
       invoiceValue: invoiceValue ?? this.invoiceValue,
       marginPercent: marginPercent ?? this.marginPercent,
+      returnDistanceKm: returnDistanceKm ?? this.returnDistanceKm,
       toll: toll ?? this.toll,
       loadingFee: loadingFee ?? this.loadingFee,
       unloadingFee: unloadingFee ?? this.unloadingFee,

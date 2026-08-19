@@ -12,15 +12,20 @@ class CommercialFreightCalculator implements FreightCalculator {
   FreightQuote calculate(QuoteInput input) {
     final vehicle = _vehicleFor(input.totalWeightKg, input.totalVolumeM3);
     final outboundDistance = input.distanceKm;
-    final returnDistance = input.distanceKm;
+    final returnDistance = input.returnDistanceKm < 0
+        ? 0.0
+        : input.returnDistanceKm;
     final totalDistance = outboundDistance + returnDistance;
-    final fuelLiters = totalDistance / input.consumptionKmPerLiter;
+    final consumption = input.consumptionKmPerLiter <= 0
+        ? 1.0
+        : input.consumptionKmPerLiter;
+    final fuelLiters = totalDistance / consumption;
     final fuelCost = fuelLiters * input.dieselLiterPrice;
     final arlaLiters = fuelLiters * (input.arlaPercent / 100);
     final arlaCost = arlaLiters * input.arlaLiterPrice;
     final maintenance = totalDistance * input.maintenanceCostPerKm;
     final tires = totalDistance * input.tireCostPerKm;
-    final toll = input.toll * 2;
+    final toll = input.toll;
     final variableCosts =
         fuelCost +
         arlaCost +
@@ -50,12 +55,16 @@ class CommercialFreightCalculator implements FreightCalculator {
     final cargoInsurance = input.invoiceValue * (input.insurancePercent / 100);
     final adValorem = input.invoiceValue * (input.adValoremPercent / 100);
     final margin = operational * (input.marginPercent / 100);
-    final taxBase = operational + cargoInsurance + adValorem + margin;
-    final icms = taxBase * (input.icmsPercent / 100);
-    final pis = taxBase * (input.pisPercent / 100);
-    final cofins = taxBase * (input.cofinsPercent / 100);
-    final commercial = taxBase + icms + pis + cofins;
+    final netValue = operational + cargoInsurance + adValorem + margin;
+    final taxPercent =
+        input.icmsPercent + input.pisPercent + input.cofinsPercent;
+    final taxFactor = 1 - (taxPercent / 100);
+    final grossValue = taxFactor <= 0 ? netValue : netValue / taxFactor;
+    final icms = grossValue * (input.icmsPercent / 100);
+    final pis = grossValue * (input.pisPercent / 100);
+    final cofins = grossValue * (input.cofinsPercent / 100);
     final antt = input.minimumAntt;
+    final commercial = antt > grossValue ? antt : grossValue;
 
     return FreightQuote(
       operationalCost: operational,
@@ -88,7 +97,7 @@ class CommercialFreightCalculator implements FreightCalculator {
       commercialValue: commercial,
       suggestedVehicle: vehicle,
       bodyType: 'Definir conforme carga',
-      isBelowAntt: antt > 0 && commercial < antt,
+      isBelowAntt: antt > 0 && grossValue < antt,
     );
   }
 

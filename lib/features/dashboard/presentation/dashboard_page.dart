@@ -29,7 +29,7 @@ class DashboardPage extends ConsumerWidget {
     return CustomScrollView(
       slivers: [
         SliverAppBar.large(
-          title: const Text('Central de receita'),
+          title: const Text('Inicio'),
           actions: [
             Padding(
               padding: const EdgeInsets.only(right: 16),
@@ -51,6 +51,62 @@ class DashboardPage extends ConsumerWidget {
                 pendingAntt: pendingAntt,
               ),
               const SizedBox(height: 18),
+              const _HomeSectionTitle(
+                title: 'Acoes rapidas',
+                subtitle: 'Escolha o que deseja fazer agora.',
+              ),
+              const SizedBox(height: 10),
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final compact = constraints.maxWidth < 760;
+                  return Wrap(
+                    spacing: 16,
+                    runSpacing: 16,
+                    children: [
+                      _ActionCard(
+                        width: compact ? constraints.maxWidth : 260,
+                        icon: Icons.request_quote_outlined,
+                        title: 'Nova cotacao',
+                        description:
+                            'Calcular frete por origem, destino e carga.',
+                        buttonLabel: 'Cotar agora',
+                        onTap: () => context.go('/cotacao'),
+                      ),
+                      _ActionCard(
+                        width: compact ? constraints.maxWidth : 260,
+                        icon: Icons.history_outlined,
+                        title: 'Historico',
+                        description: 'Ver propostas salvas e status comercial.',
+                        buttonLabel: 'Ver historico',
+                        onTap: () => _scrollToHistory(context),
+                      ),
+                      _ActionCard(
+                        width: compact ? constraints.maxWidth : 260,
+                        icon: Icons.apartment_outlined,
+                        title: 'Clientes',
+                        description: 'Cadastrar PF/PJ e consultar CNPJ.',
+                        buttonLabel: 'Abrir clientes',
+                        onTap: () => context.go('/clientes'),
+                      ),
+                      _ActionCard(
+                        width: compact ? constraints.maxWidth : 260,
+                        icon: Icons.tune_outlined,
+                        title: 'Ajustes',
+                        description: 'Configurar impostos, custos e margem.',
+                        buttonLabel: 'Configurar',
+                        onTap: () => context.go('/configuracoes'),
+                      ),
+                    ],
+                  );
+                },
+              ),
+              const SizedBox(height: 24),
+              const _HomeSectionTitle(
+                title: 'Resumo comercial',
+                subtitle:
+                    'Indicadores calculados a partir das cotacoes salvas.',
+              ),
+              const SizedBox(height: 10),
               LayoutBuilder(
                 builder: (context, constraints) {
                   final compact = constraints.maxWidth < 760;
@@ -63,7 +119,10 @@ class DashboardPage extends ConsumerWidget {
                         icon: Icons.request_quote,
                         label: 'Cotacoes salvas',
                         value: '$openQuotes',
-                        detail: '$pendingAntt precisam revisao fiscal',
+                        detail: pendingAntt == 0
+                            ? 'Nenhuma revisao fiscal pendente'
+                            : '$pendingAntt precisam revisao fiscal',
+                        emptyHint: 'Comece criando uma nova cotacao.',
                       ),
                       _MetricCard(
                         width: compact ? constraints.maxWidth : 260,
@@ -71,6 +130,7 @@ class DashboardPage extends ConsumerWidget {
                         label: 'Carteira prevista',
                         value: brl(wallet),
                         detail: 'Pipeline comercial',
+                        emptyHint: 'Soma das cotacoes salvas aparecera aqui.',
                       ),
                       _MetricCard(
                         width: compact ? constraints.maxWidth : 260,
@@ -78,6 +138,7 @@ class DashboardPage extends ConsumerWidget {
                         label: 'Dentro da politica',
                         value: '$approvedForSale',
                         detail: 'Acima do piso informado',
+                        emptyHint: 'Depende do piso ANTT informado.',
                       ),
                       _MetricCard(
                         width: compact ? constraints.maxWidth : 260,
@@ -85,6 +146,7 @@ class DashboardPage extends ConsumerWidget {
                         label: 'Ticket medio',
                         value: brl(averageTicket),
                         detail: 'Media das propostas',
+                        emptyHint: 'Media calculada apos salvar cotacoes.',
                       ),
                     ],
                   );
@@ -274,6 +336,107 @@ class _HeroBadge extends StatelessWidget {
   }
 }
 
+void _scrollToHistory(BuildContext context) {
+  ScaffoldMessenger.of(context)
+    ..hideCurrentSnackBar()
+    ..showSnackBar(
+      const SnackBar(content: Text('O historico fica no final desta tela.')),
+    );
+}
+
+class _HomeSectionTitle extends StatelessWidget {
+  const _HomeSectionTitle({required this.title, required this.subtitle});
+
+  final String title;
+  final String subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: Theme.of(
+            context,
+          ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+        ),
+        const SizedBox(height: 3),
+        Text(
+          subtitle,
+          style: Theme.of(
+            context,
+          ).textTheme.bodyMedium?.copyWith(color: const Color(0xFF526B68)),
+        ),
+      ],
+    );
+  }
+}
+
+class _ActionCard extends StatelessWidget {
+  const _ActionCard({
+    required this.width,
+    required this.icon,
+    required this.title,
+    required this.description,
+    required this.buttonLabel,
+    required this.onTap,
+  });
+
+  final double width;
+  final IconData icon;
+  final String title;
+  final String description;
+  final String buttonLabel;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: width,
+      child: Card(
+        color: const Color(0xFFFFFFFF),
+        surfaceTintColor: Colors.white,
+        child: Padding(
+          padding: const EdgeInsets.all(18),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEAF4F2),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(icon, color: const Color(0xFF0E6F68)),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                title,
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                description,
+                style: const TextStyle(color: Color(0xFF526B68)),
+              ),
+              const SizedBox(height: 14),
+              FilledButton.tonalIcon(
+                onPressed: onTap,
+                icon: const Icon(Icons.arrow_forward),
+                label: Text(buttonLabel),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _MetricCard extends StatelessWidget {
   const _MetricCard({
     required this.width,
@@ -281,6 +444,7 @@ class _MetricCard extends StatelessWidget {
     required this.label,
     required this.value,
     required this.detail,
+    required this.emptyHint,
   });
 
   final double width;
@@ -288,12 +452,15 @@ class _MetricCard extends StatelessWidget {
   final String label;
   final String value;
   final String detail;
+  final String emptyHint;
 
   @override
   Widget build(BuildContext context) {
     return SizedBox(
       width: width,
       child: Card(
+        color: const Color(0xFFFFFFFF),
+        surfaceTintColor: Colors.white,
         child: Padding(
           padding: const EdgeInsets.all(18),
           child: Column(
@@ -304,7 +471,21 @@ class _MetricCard extends StatelessWidget {
               Text(label, style: Theme.of(context).textTheme.labelLarge),
               const SizedBox(height: 6),
               Text(value, style: Theme.of(context).textTheme.headlineSmall),
-              Text(detail, style: Theme.of(context).textTheme.bodySmall),
+              const SizedBox(height: 4),
+              Text(
+                detail,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: const Color(0xFF315654),
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                emptyHint,
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: const Color(0xFF667085)),
+              ),
             ],
           ),
         ),

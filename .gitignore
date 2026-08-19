@@ -43,3 +43,7 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Local API keys and dart defines
+/dart_defines/*.json
+!/dart_defines/openroute.example.json

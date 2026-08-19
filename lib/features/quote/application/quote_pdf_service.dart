@@ -20,6 +20,8 @@ class QuotePdfService {
     String origin = 'Guarulhos, SP',
     String destination = 'Contagem, MG',
     String cargoType = 'Carga seca paletizada',
+    String? bodyType,
+    int validityDays = 7,
     String anttCargoType = 'Carga geral',
     int anttAxles = 2,
     bool isDieselVehicle = true,
@@ -48,7 +50,7 @@ class QuotePdfService {
         build: (context) => [
           _header(generatedAt),
           pw.SizedBox(height: 22),
-          _heroSummary(quote),
+          _heroSummary(quote, bodyType ?? quote.bodyType),
           pw.SizedBox(height: 18),
           pw.Row(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
@@ -58,7 +60,7 @@ class QuotePdfService {
                   _line('Solicitante', customerName),
                   _line('Tipo', quoteType),
                   _line('Vendedor', sellerName),
-                  _line('Validade', '7 dias corridos'),
+                  _line('Validade', '$validityDays dias corridos'),
                 ]),
               ),
               pw.SizedBox(width: 14),
@@ -67,16 +69,18 @@ class QuotePdfService {
                   _line('Origem', origin),
                   _line('Destino', destination),
                   _line(
-                    'Distancia total',
+                    'Km considerado no custo',
                     '${quote.totalDistanceKm.toStringAsFixed(0)} km',
                   ),
                   _line(
-                    'Ida',
+                    'Distancia da rota',
                     '${quote.outboundDistanceKm.toStringAsFixed(0)} km',
                   ),
                   _line(
                     'Retorno',
-                    '${quote.returnDistanceKm.toStringAsFixed(0)} km',
+                    quote.returnDistanceKm > 0
+                        ? '${quote.returnDistanceKm.toStringAsFixed(0)} km'
+                        : 'Nao aplicado automaticamente',
                   ),
                   _line('Modalidade', 'Rodoviario dedicado'),
                 ]),
@@ -91,7 +95,7 @@ class QuotePdfService {
             _line('Cubagem', '${input.totalVolumeM3.toStringAsFixed(1)} m3'),
             _line('Porte operacional', quote.suggestedVehicle),
             _line('Eixos ANTT', '$anttAxles eixos'),
-            _line('Carroceria', quote.bodyType),
+            _line('Carroceria', bodyType ?? quote.bodyType),
             _line('Valor aproximado da NF', brl(input.invoiceValue)),
           ]),
           pw.SizedBox(height: 14),
@@ -115,7 +119,7 @@ class QuotePdfService {
           pw.SizedBox(height: 16),
           _anttBox(quote),
           pw.SizedBox(height: 16),
-          _terms(),
+          _terms(validityDays),
         ],
         footer: (context) => pw.Container(
           alignment: pw.Alignment.centerRight,
@@ -139,6 +143,8 @@ class QuotePdfService {
     required String origin,
     required String destination,
     required String cargoType,
+    String? bodyType,
+    int validityDays = 7,
     String anttCargoType = 'Carga geral',
     int anttAxles = 2,
     bool isDieselVehicle = true,
@@ -195,13 +201,13 @@ class QuotePdfService {
             _line('Cubagem', '${input.totalVolumeM3.toStringAsFixed(1)} m3'),
             _line('Porte operacional', quote.suggestedVehicle),
             _line('Eixos ANTT', '$anttAxles eixos'),
-            _line('Carroceria', quote.bodyType),
+            _line('Carroceria', bodyType ?? quote.bodyType),
           ]),
           pw.SizedBox(height: 12),
           _section('Preco e condicoes', [
             _line('Valor do frete', brl(quote.commercialValue)),
             _line(
-              'Distancia total estimada',
+              'Km considerado no custo',
               '${quote.totalDistanceKm.toStringAsFixed(0)} km',
             ),
             _line('Transporte nacional', _yesNo(isNationalTrip)),
@@ -211,7 +217,7 @@ class QuotePdfService {
             _line('Alto desempenho', _yesNo(isHighPerformance)),
             _line('Retorno vazio', _yesNo(hasEmptyReturn)),
             _line('Piso ANTT informado', brl(quote.minimumAnttValue)),
-            _line('Validade da proposta', '7 dias corridos'),
+            _line('Validade da proposta', '$validityDays dias corridos'),
             _line(
               'Impostos e taxas',
               'Incluidos conforme parametros informados na cotacao',
@@ -291,7 +297,7 @@ class QuotePdfService {
     );
   }
 
-  static pw.Widget _heroSummary(FreightQuote quote) {
+  static pw.Widget _heroSummary(FreightQuote quote, String bodyType) {
     return pw.Container(
       padding: const pw.EdgeInsets.all(18),
       decoration: pw.BoxDecoration(
@@ -323,7 +329,7 @@ class QuotePdfService {
               pw.Text(quote.suggestedVehicle, style: _valueStyle()),
               pw.SizedBox(height: 8),
               pw.Text('Carroceria', style: _labelStyle()),
-              pw.Text(quote.bodyType, style: _valueStyle()),
+              pw.Text(bodyType, style: _valueStyle()),
             ],
           ),
         ],
@@ -341,7 +347,7 @@ class QuotePdfService {
         'Arla 32 (${quote.arlaLiters.toStringAsFixed(1)} l)',
         brl(quote.arlaCost),
       ],
-      ['Pedagio ida e volta', brl(quote.tollCost)],
+      ['Pedagio informado', brl(quote.tollCost)],
       ['Lubrificantes / manutencao', brl(quote.maintenanceCost)],
       ['Pneus / depreciacao por km', brl(quote.tireCost)],
       ['Carga e descarga', brl(input.loadingFee + input.unloadingFee)],
@@ -411,11 +417,11 @@ class QuotePdfService {
     );
   }
 
-  static pw.Widget _terms() {
+  static pw.Widget _terms(int validityDays) {
     return _section('Condicoes comerciais', [
       _line(
         'Prazo de validade',
-        '7 dias ou enquanto houver disponibilidade operacional',
+        '$validityDays dias ou enquanto houver disponibilidade operacional',
       ),
       _line(
         'Impostos',

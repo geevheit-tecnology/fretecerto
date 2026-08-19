@@ -55,9 +55,15 @@ void main() {
   testWidgets('fluxo principal cabe em mobile', (tester) async {
     await setSurface(tester, width: 390, height: 844);
     await tester.pumpWidget(_TestApp(initialLocation: '/'));
-    expect(find.text('Central de receita'), findsWidgets);
+    expect(find.text('Inicio'), findsWidgets);
+    await tester.dragUntilVisible(
+      find.text('Acoes rapidas'),
+      find.byType(CustomScrollView),
+      const Offset(0, -300),
+    );
+    expect(find.text('Acoes rapidas'), findsOneWidget);
 
-    await tester.tap(find.text('Cotacao'));
+    await tester.tap(find.text('Nova'));
     await tester.pumpAndSettle();
     expect(find.text('Nova cotacao'), findsWidgets);
     expect(find.text('Formulario rapido sem compromisso'), findsOneWidget);
@@ -76,12 +82,12 @@ void main() {
     expect(find.text('Calcular e aplicar'), findsOneWidget);
     expect(find.text('Conferir no mapa'), findsOneWidget);
     await tester.dragUntilVisible(
-      find.text('Porte operacional'),
+      find.textContaining('Preencha os dados principais'),
       find.byType(CustomScrollView).last,
       const Offset(0, -500),
     );
-    expect(find.text('Porte operacional'), findsOneWidget);
-    expect(find.text('Orcamento rapido'), findsWidgets);
+    expect(find.textContaining('Preencha os dados principais'), findsOneWidget);
+    expect(find.text('Pedido do cliente'), findsWidgets);
     await tester.dragUntilVisible(
       find.widgetWithText(TextField, 'Origem'),
       find.byType(CustomScrollView).last,
@@ -117,6 +123,35 @@ void main() {
 
     await tester.tap(find.text('Cotacao'));
     await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Cliente'),
+      'Forte Expressa',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Origem'),
+      'Sao Paulo, SP',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Destino'),
+      'Curitiba, PR',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Peso total'),
+      '25000',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Tipo de carga'),
+      'Aco',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Distancia rodoviaria'),
+      '410',
+    );
+    await tester.pumpAndSettle();
+    await tester.drag(find.byType(CustomScrollView).last, const Offset(0, 900));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Calcular cotacao'));
+    await tester.pumpAndSettle();
     await tester.dragUntilVisible(
       find.widgetWithText(OutlinedButton, 'Salvar'),
       find.byType(CustomScrollView).last,
@@ -129,7 +164,7 @@ void main() {
 
     await tester.tap(find.text('Painel'));
     await tester.pumpAndSettle();
-    expect(find.text('Central de receita'), findsWidgets);
+    expect(find.text('Inicio'), findsWidgets);
     await tester.dragUntilVisible(
       find.text('Historico de cotacoes'),
       find.byType(CustomScrollView),
@@ -137,7 +172,7 @@ void main() {
     );
     expect(find.text('Historico de cotacoes'), findsOneWidget);
     expect(find.text('Forte Expressa'), findsWidgets);
-    expect(find.text('Pronto para proposta'), findsWidgets);
+    expect(find.text('ANTT nao informado'), findsWidgets);
   });
 }
 

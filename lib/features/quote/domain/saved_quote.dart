@@ -15,6 +15,7 @@ class SavedQuote {
     required this.totalDistanceKm,
     required this.suggestedVehicle,
     required this.bodyType,
+    required this.validityDays,
     required this.commercialValue,
     required this.operationalCost,
     required this.minimumAnttValue,
@@ -45,6 +46,7 @@ class SavedQuote {
   final double totalDistanceKm;
   final String suggestedVehicle;
   final String bodyType;
+  final int validityDays;
   final double commercialValue;
   final double operationalCost;
   final double minimumAnttValue;
@@ -74,6 +76,7 @@ class SavedQuote {
       'total_distance_km': totalDistanceKm,
       'suggested_vehicle': suggestedVehicle,
       'body_type': bodyType,
+      'validity_days': validityDays,
       'commercial_value': commercialValue,
       'operational_cost': operationalCost,
       'minimum_antt_value': minimumAnttValue,
@@ -107,6 +110,7 @@ class SavedQuote {
       totalDistanceKm: _double(map['total_distance_km']),
       suggestedVehicle: map['suggested_vehicle']?.toString() ?? '',
       bodyType: map['body_type']?.toString() ?? '',
+      validityDays: int.tryParse(map['validity_days'].toString()) ?? 7,
       commercialValue: _double(map['commercial_value']),
       operationalCost: _double(map['operational_cost']),
       minimumAnttValue: _double(map['minimum_antt_value']),
