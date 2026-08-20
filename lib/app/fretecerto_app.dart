@@ -23,8 +23,10 @@ GoRouter createRouter({String initialLocation = '/login'}) {
           GoRoute(path: '/cotacao', builder: (_, _) => const QuotePage()),
           GoRoute(
             path: '/clientes',
-            builder: (_, state) =>
-                CustomersPage(returnTo: state.uri.queryParameters['returnTo']),
+            builder: (_, state) => CustomersPage(
+              returnTo: state.uri.queryParameters['returnTo'],
+              customerId: state.uri.queryParameters['customerId'],
+            ),
           ),
           GoRoute(
             path: '/localidades',

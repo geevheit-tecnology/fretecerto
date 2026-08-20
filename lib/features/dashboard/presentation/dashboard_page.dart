@@ -196,7 +196,11 @@ class DashboardPage extends ConsumerWidget {
                         const _EmptyHistory()
                       else
                         for (final quote in quotes)
-                          _ProposalTile.fromQuote(quote),
+                          _ProposalTile.fromQuote(
+                            quote,
+                            onTap: () =>
+                                _openQuoteStatusSheet(context, ref, quote),
+                          ),
                     ],
                   ),
                 ),
@@ -719,14 +723,19 @@ class _ProposalTile extends StatelessWidget {
     required this.route,
     required this.amount,
     required this.status,
+    required this.onTap,
   });
 
   final String company;
   final String route;
   final double amount;
   final String status;
+  final VoidCallback onTap;
 
-  factory _ProposalTile.fromQuote(SavedQuote quote) {
+  factory _ProposalTile.fromQuote(
+    SavedQuote quote, {
+    required VoidCallback onTap,
+  }) {
     return _ProposalTile(
       company: quote.customerName,
       route: '${quote.origin} -> ${quote.destination}',
@@ -735,7 +744,10 @@ class _ProposalTile extends StatelessWidget {
           ? 'Revisar piso ANTT'
           : quote.minimumAnttValue <= 0
           ? 'ANTT nao informado'
+          : quote.status.isNotEmpty
+          ? quote.status
           : 'Pronto para proposta',
+      onTap: onTap,
     );
   }
 
@@ -743,6 +755,7 @@ class _ProposalTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListTile(
       contentPadding: EdgeInsets.zero,
+      onTap: onTap,
       leading: const CircleAvatar(child: Icon(Icons.inventory_2_outlined)),
       title: Text(company),
       subtitle: Text(route),
@@ -756,6 +769,138 @@ class _ProposalTile extends StatelessWidget {
       ),
     );
   }
+}
+
+Future<void> _openQuoteStatusSheet(
+  BuildContext context,
+  WidgetRef ref,
+  SavedQuote quote,
+) async {
+  const statuses = [
+    'Pronto para proposta',
+    'Em negociacao',
+    'Fechado',
+    'Perdido',
+    'Cancelado',
+    'Revisar piso ANTT',
+  ];
+  var selectedStatus = statuses.contains(quote.status)
+      ? quote.status
+      : quote.isBelowAntt
+      ? 'Revisar piso ANTT'
+      : 'Pronto para proposta';
+  await showModalBottomSheet<void>(
+    context: context,
+    showDragHandle: true,
+    builder: (sheetContext) {
+      return StatefulBuilder(
+        builder: (context, setSheetState) {
+          return Padding(
+            padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  quote.customerName,
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                const SizedBox(height: 4),
+                Text('${quote.origin} -> ${quote.destination}'),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  initialValue: selectedStatus,
+                  decoration: const InputDecoration(
+                    labelText: 'Status comercial',
+                    prefixIcon: Icon(Icons.flag_outlined),
+                  ),
+                  items: [
+                    for (final status in statuses)
+                      DropdownMenuItem(value: status, child: Text(status)),
+                  ],
+                  onChanged: (value) {
+                    if (value == null) return;
+                    setSheetState(() => selectedStatus = value);
+                  },
+                ),
+                const SizedBox(height: 16),
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 10,
+                  children: [
+                    FilledButton.icon(
+                      onPressed: () {
+                        ref
+                            .read(quoteHistoryProvider.notifier)
+                            .updateStatus(quote, selectedStatus);
+                        Navigator.of(sheetContext).pop();
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Status atualizado.')),
+                        );
+                      },
+                      icon: const Icon(Icons.save_outlined),
+                      label: const Text('Salvar status'),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: () {
+                        ref
+                            .read(quoteHistoryProvider.notifier)
+                            .updateStatus(quote, 'Perdido');
+                        Navigator.of(sheetContext).pop();
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Cotacao marcada como perdida.'),
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.thumb_down_alt_outlined),
+                      label: const Text('Nao deu certo'),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: () async {
+                        final confirmed = await showDialog<bool>(
+                          context: context,
+                          builder: (context) => AlertDialog(
+                            title: const Text('Excluir cotacao'),
+                            content: const Text(
+                              'Essa cotacao sera removida do historico.',
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () =>
+                                    Navigator.of(context).pop(false),
+                                child: const Text('Cancelar'),
+                              ),
+                              FilledButton.tonalIcon(
+                                onPressed: () =>
+                                    Navigator.of(context).pop(true),
+                                icon: const Icon(Icons.delete_outline),
+                                label: const Text('Excluir'),
+                              ),
+                            ],
+                          ),
+                        );
+                        if (confirmed != true) return;
+                        ref.read(quoteHistoryProvider.notifier).delete(quote);
+                        if (context.mounted) {
+                          Navigator.of(sheetContext).pop();
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Cotacao excluida.')),
+                          );
+                        }
+                      },
+                      icon: const Icon(Icons.delete_outline),
+                      label: const Text('Excluir'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          );
+        },
+      );
+    },
+  );
 }
 
 class _EmptyHistory extends StatelessWidget {

@@ -25,6 +25,34 @@ class Customer {
   final String status;
   final String mainActivity;
 
+  Customer copyWith({
+    String? id,
+    String? type,
+    String? document,
+    String? name,
+    String? email,
+    String? phone,
+    String? city,
+    String? address,
+    String? tradeName,
+    String? status,
+    String? mainActivity,
+  }) {
+    return Customer(
+      id: id ?? this.id,
+      type: type ?? this.type,
+      document: document ?? this.document,
+      name: name ?? this.name,
+      email: email ?? this.email,
+      phone: phone ?? this.phone,
+      city: city ?? this.city,
+      address: address ?? this.address,
+      tradeName: tradeName ?? this.tradeName,
+      status: status ?? this.status,
+      mainActivity: mainActivity ?? this.mainActivity,
+    );
+  }
+
   Map<String, dynamic> toInsert() {
     return {
       'type': type,

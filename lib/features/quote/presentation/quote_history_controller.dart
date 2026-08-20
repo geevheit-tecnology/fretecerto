@@ -31,6 +31,25 @@ class QuoteHistoryNotifier extends Notifier<List<SavedQuote>> {
     }
   }
 
+  Future<void> updateStatus(SavedQuote quote, String status) async {
+    final updated = quote.copyWith(status: status);
+    state = [for (final item in state) item.id == quote.id ? updated : item];
+    try {
+      await _repository.updateStatus(quote.id, status);
+    } catch (_) {
+      // Mantem o status local mesmo se a conexao falhar.
+    }
+  }
+
+  Future<void> delete(SavedQuote quote) async {
+    state = state.where((item) => item.id != quote.id).toList(growable: false);
+    try {
+      await _repository.delete(quote.id);
+    } catch (_) {
+      // Se estiver offline, pelo menos remove da lista visivel nesta sessao.
+    }
+  }
+
   Future<void> _loadRemote() async {
     final quotes = await _repository.recentQuotes();
     if (quotes.isNotEmpty) {

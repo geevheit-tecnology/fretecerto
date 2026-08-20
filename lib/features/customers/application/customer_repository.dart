@@ -22,11 +22,24 @@ class CustomerRepository {
   }
 
   Future<Customer> save(Customer customer) async {
+    if (customer.id != null) {
+      final row = await _client
+          .from('customers')
+          .update(customer.toInsert())
+          .eq('id', customer.id!)
+          .select()
+          .single();
+      return Customer.fromMap(row);
+    }
     final rows = await _client
         .from('customers')
         .upsert(customer.toInsert(), onConflict: 'document')
         .select()
         .limit(1);
     return Customer.fromMap(rows.single);
+  }
+
+  Future<void> delete(String id) async {
+    await _client.from('customers').delete().eq('id', id);
   }
 }

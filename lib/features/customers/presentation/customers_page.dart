@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/formatters/brl.dart';
+import '../../quote/presentation/quote_controller.dart';
 import '../../quote/domain/saved_quote.dart';
 import '../../quote/presentation/quote_history_controller.dart';
 import '../application/cep_lookup_service.dart';
@@ -13,9 +14,10 @@ import '../domain/customer.dart';
 enum _CustomerKind { company, person }
 
 class CustomersPage extends ConsumerStatefulWidget {
-  const CustomersPage({super.key, this.returnTo});
+  const CustomersPage({super.key, this.returnTo, this.customerId});
 
   final String? returnTo;
+  final String? customerId;
 
   @override
   ConsumerState<CustomersPage> createState() => _CustomersPageState();
@@ -30,12 +32,30 @@ class _CustomersPageState extends ConsumerState<CustomersPage> {
   void initState() {
     super.initState();
     _customersFuture = _repository.recentCustomers();
+    _selectInitialCustomer();
   }
 
   void _reloadCustomers() {
     setState(() {
       _customersFuture = _repository.recentCustomers();
     });
+  }
+
+  void _selectCustomer(Customer customer) {
+    setState(() => _selectedCustomer = customer);
+  }
+
+  Future<void> _selectInitialCustomer() async {
+    final customerId = widget.customerId;
+    if (customerId == null || customerId.isEmpty) return;
+    final customers = await _customersFuture;
+    if (!mounted) return;
+    for (final customer in customers) {
+      if (customer.id == customerId) {
+        _selectCustomer(customer);
+        return;
+      }
+    }
   }
 
   @override
@@ -52,20 +72,29 @@ class _CustomersPageState extends ConsumerState<CustomersPage> {
                 repository: _repository,
                 quotes: quotes,
                 selectedCustomer: _selectedCustomer,
-                onSaved: () {
+                onSaved: (customer) {
                   _reloadCustomers();
                   final returnTo = widget.returnTo;
                   if (returnTo != null && returnTo.isNotEmpty) {
+                    if (returnTo == '/cotacao') {
+                      final form = ref.read(quoteFormProvider);
+                      ref
+                          .read(quoteFormProvider.notifier)
+                          .update(form.copyWith(customerName: customer.name));
+                    }
                     context.go(returnTo);
                   }
                 },
+                onDeleted: () {
+                  setState(() => _selectedCustomer = null);
+                  _reloadCustomers();
+                },
+                onNew: () => setState(() => _selectedCustomer = null),
               ),
               const SizedBox(height: 20),
               _RecentCustomersCard(
                 customersFuture: _customersFuture,
-                onCustomerSelected: (customer) {
-                  setState(() => _selectedCustomer = customer);
-                },
+                onCustomerSelected: _selectCustomer,
               ),
             ]),
           ),
@@ -81,12 +110,16 @@ class _CustomerWorkspace extends StatefulWidget {
     required this.quotes,
     required this.selectedCustomer,
     required this.onSaved,
+    required this.onDeleted,
+    required this.onNew,
   });
 
   final CustomerRepository repository;
   final List<SavedQuote> quotes;
   final Customer? selectedCustomer;
-  final VoidCallback onSaved;
+  final ValueChanged<Customer> onSaved;
+  final VoidCallback onDeleted;
+  final VoidCallback onNew;
 
   @override
   State<_CustomerWorkspace> createState() => _CustomerWorkspaceState();
@@ -108,6 +141,7 @@ class _CustomerWorkspaceState extends State<_CustomerWorkspace> {
   bool _loadingDocument = false;
   bool _loadingCep = false;
   bool _saving = false;
+  bool _deleting = false;
 
   @override
   void dispose() {
@@ -201,6 +235,7 @@ class _CustomerWorkspaceState extends State<_CustomerWorkspace> {
     setState(() => _saving = true);
     try {
       final customer = Customer(
+        id: widget.selectedCustomer?.id,
         type: _kind == _CustomerKind.company ? 'company' : 'person',
         document: document,
         name: name,
@@ -214,9 +249,9 @@ class _CustomerWorkspaceState extends State<_CustomerWorkspace> {
             : 'Pessoa fisica',
         mainActivity: _cnpjLookup?.mainActivity ?? '',
       );
-      await widget.repository.save(customer);
+      final saved = await widget.repository.save(customer);
       if (!mounted) return;
-      widget.onSaved();
+      widget.onSaved(saved);
       _message('Cliente salvo com sucesso.');
     } catch (_) {
       if (mounted) {
@@ -227,9 +262,53 @@ class _CustomerWorkspaceState extends State<_CustomerWorkspace> {
     }
   }
 
+  Future<void> _deleteCustomer() async {
+    final customer = widget.selectedCustomer;
+    if (customer?.id == null) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Excluir cliente'),
+        content: Text(
+          'Excluir ${customer!.name}? As cotacoes salvas continuam no historico.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton.tonalIcon(
+            onPressed: () => Navigator.of(context).pop(true),
+            icon: const Icon(Icons.delete_outline),
+            label: const Text('Excluir'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    setState(() => _deleting = true);
+    try {
+      await widget.repository.delete(customer!.id!);
+      if (!mounted) return;
+      _clearForm();
+      widget.onDeleted();
+      _message('Cliente excluido.');
+    } catch (_) {
+      if (mounted) _message('Nao consegui excluir. Confira sua permissao.');
+    } finally {
+      if (mounted) setState(() => _deleting = false);
+    }
+  }
+
   void _changeKind(_CustomerKind kind) {
     setState(() {
       _kind = kind;
+    });
+    _clearForm();
+  }
+
+  void _clearForm() {
+    setState(() {
       _cnpjLookup = null;
       _documentController.clear();
       _nameController.clear();
@@ -239,6 +318,7 @@ class _CustomerWorkspaceState extends State<_CustomerWorkspace> {
       _cityController.clear();
       _addressController.clear();
     });
+    widget.onNew();
   }
 
   void _message(String text) {
@@ -272,10 +352,14 @@ class _CustomerWorkspaceState extends State<_CustomerWorkspace> {
                 loadingDocument: _loadingDocument,
                 loadingCep: _loadingCep,
                 saving: _saving,
+                deleting: _deleting,
+                editing: widget.selectedCustomer?.id != null,
                 onKindChanged: _changeKind,
                 onLookupDocument: _lookupCnpj,
                 onLookupCep: _lookupCep,
                 onSave: _saveCustomer,
+                onNew: _clearForm,
+                onDelete: _deleteCustomer,
               ),
             ),
             SizedBox(
@@ -318,10 +402,14 @@ class _CustomerFormCard extends StatelessWidget {
     required this.loadingDocument,
     required this.loadingCep,
     required this.saving,
+    required this.deleting,
+    required this.editing,
     required this.onKindChanged,
     required this.onLookupDocument,
     required this.onLookupCep,
     required this.onSave,
+    required this.onNew,
+    required this.onDelete,
   });
 
   final _CustomerKind kind;
@@ -336,10 +424,14 @@ class _CustomerFormCard extends StatelessWidget {
   final bool loadingDocument;
   final bool loadingCep;
   final bool saving;
+  final bool deleting;
+  final bool editing;
   final ValueChanged<_CustomerKind> onKindChanged;
   final VoidCallback onLookupDocument;
   final VoidCallback onLookupCep;
   final VoidCallback onSave;
+  final VoidCallback onNew;
+  final VoidCallback onDelete;
 
   bool get isCompany => kind == _CustomerKind.company;
 
@@ -355,7 +447,7 @@ class _CustomerFormCard extends StatelessWidget {
               children: [
                 Expanded(
                   child: Text(
-                    'Cadastro de cliente',
+                    editing ? 'Editar cliente' : 'Cadastro de cliente',
                     style: Theme.of(context).textTheme.titleLarge,
                   ),
                 ),
@@ -476,10 +568,32 @@ class _CustomerFormCard extends StatelessWidget {
               _CnpjLookupSummary(result: cnpjLookup!),
             ],
             const SizedBox(height: 16),
-            FilledButton.icon(
-              onPressed: saving ? null : onSave,
-              icon: const Icon(Icons.save_outlined),
-              label: Text(saving ? 'Salvando...' : 'Salvar cliente'),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                FilledButton.icon(
+                  onPressed: saving || deleting ? null : onSave,
+                  icon: const Icon(Icons.save_outlined),
+                  label: Text(saving ? 'Salvando...' : 'Salvar cliente'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: saving || deleting ? null : onNew,
+                  icon: const Icon(Icons.add_outlined),
+                  label: const Text('Novo'),
+                ),
+                if (editing)
+                  OutlinedButton.icon(
+                    onPressed: saving || deleting ? null : onDelete,
+                    icon: deleting
+                        ? const SizedBox.square(
+                            dimension: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.delete_outline),
+                    label: Text(deleting ? 'Excluindo...' : 'Excluir'),
+                  ),
+              ],
             ),
           ],
         ),

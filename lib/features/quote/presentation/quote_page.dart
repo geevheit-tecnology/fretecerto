@@ -141,6 +141,20 @@ class _QuotePageState extends ConsumerState<QuotePage> {
                           },
                           onCreate: () =>
                               context.go('/clientes?returnTo=/cotacao'),
+                          onEdit: (customer) {
+                            if (customer.id == null) {
+                              _markDirty();
+                              ref
+                                  .read(quoteFormProvider.notifier)
+                                  .update(
+                                    form.copyWith(customerName: customer.name),
+                                  );
+                              return;
+                            }
+                            context.go(
+                              '/clientes?returnTo=/cotacao&customerId=${customer.id}',
+                            );
+                          },
                         ),
                         _EditableField(
                           label: 'Vendedor',
@@ -2082,11 +2096,13 @@ class _CustomerPicker extends StatefulWidget {
     required this.value,
     required this.onChanged,
     required this.onCreate,
+    required this.onEdit,
   });
 
   final String value;
   final ValueChanged<String> onChanged;
   final VoidCallback onCreate;
+  final ValueChanged<Customer> onEdit;
 
   @override
   State<_CustomerPicker> createState() => _CustomerPickerState();
@@ -2182,10 +2198,7 @@ class _CustomerPickerState extends State<_CustomerPicker> {
                       size: 18,
                     ),
                     label: Text(customer.name),
-                    onPressed: () {
-                      _controller.text = customer.name;
-                      widget.onChanged(customer.name);
-                    },
+                    onPressed: () => widget.onEdit(customer),
                   ),
               ],
             )

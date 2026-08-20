@@ -61,6 +61,40 @@ class SavedQuote {
   final bool hasEmptyReturn;
   final String status;
 
+  SavedQuote copyWith({String? status}) {
+    return SavedQuote(
+      id: id,
+      createdAt: createdAt,
+      customerName: customerName,
+      sellerName: sellerName,
+      origin: origin,
+      destination: destination,
+      cargoType: cargoType,
+      quoteType: quoteType,
+      totalWeightKg: totalWeightKg,
+      totalVolumeM3: totalVolumeM3,
+      invoiceValue: invoiceValue,
+      distanceKm: distanceKm,
+      totalDistanceKm: totalDistanceKm,
+      suggestedVehicle: suggestedVehicle,
+      bodyType: bodyType,
+      validityDays: validityDays,
+      commercialValue: commercialValue,
+      operationalCost: operationalCost,
+      minimumAnttValue: minimumAnttValue,
+      isBelowAntt: isBelowAntt,
+      anttCargoType: anttCargoType,
+      anttAxles: anttAxles,
+      isDieselVehicle: isDieselVehicle,
+      isNationalTrip: isNationalTrip,
+      isFullTruckload: isFullTruckload,
+      isVehicleComposition: isVehicleComposition,
+      isHighPerformance: isHighPerformance,
+      hasEmptyReturn: hasEmptyReturn,
+      status: status ?? this.status,
+    );
+  }
+
   Map<String, dynamic> toInsert() {
     return {
       'customer_name': customerName,

@@ -27,4 +27,12 @@ class QuoteRepository {
     final row = await _client.from('quotes').insert(payload).select().single();
     return SavedQuote.fromMap(row);
   }
+
+  Future<void> updateStatus(String id, String status) async {
+    await _client.from('quotes').update({'status': status}).eq('id', id);
+  }
+
+  Future<void> delete(String id) async {
+    await _client.from('quotes').delete().eq('id', id);
+  }
 }
